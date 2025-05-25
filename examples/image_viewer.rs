@@ -49,7 +49,7 @@ struct Args {
     #[clap(long, short, default_value_t = 256)]
     palette_size: usize,
 
-    /// Use ADU intead of Focal for palette generation.
+    /// The palette generator to use.
     #[clap(long, short = 'f', default_value_t = PaletteFormat::Focal)]
     palette_format: PaletteFormat,
 }
