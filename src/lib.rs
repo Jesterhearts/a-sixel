@@ -87,6 +87,31 @@ const fn num2six(num: u8) -> char {
     (0x3f + num) as char
 }
 
+/// The main type for performing sixel encoding. It is provided with two generic
+/// parameters:
+/// - A [`PaletteBuilder`] to generate a color palette from the input image
+///   (sixel only supports up to 256 colors).
+/// - A [`Dither`] type to apply dithering to the reduced color image before
+///   encoding it into sixel format.
+///
+/// A number of type aliases are provided for common configurations, such as
+/// `ADUSixelEncoder256`, which uses the [`ADUPaletteBuilder`] with 256 colors.
+///
+/// # Choosing a `PaletteBuilder`
+/// - [`ADUPaletteBuilder`] is a good default choice for minimizing the error
+///   across the image. For maximum color accuracy at the cost of speed, you can
+///   use [`ADUSixelEncoder256High`].
+/// - [`FocalPaletteBuilder`] is a good choice if the image has highlights and
+///   other color details that ADU might squash, but is experimental and much
+///   slower. You can increase the number of steps to improve accuracy even
+///   futher, as is done by [`FocalSixelEncoder256High`].
+/// - Other palette builders are available, but are likely to perform less well
+///   at image accuracy than either of these two.
+///
+/// # Choosing a `Dither`
+/// - [`Sierra`](dither::Sierra) is a good default choice for dithering, as it
+///   produces high-quality results with minimal artifacts.
+/// - [`NoDither`](dither::NoDither) can be used if performance is a concern.
 pub struct SixelEncoder<P: PaletteBuilder = FocalPaletteBuilder, D: Dither = Sierra> {
     _p: std::marker::PhantomData<P>,
     _d: std::marker::PhantomData<D>,
@@ -98,6 +123,7 @@ pub type ADUSixelEncoder32<D = Sierra> = SixelEncoder<ADUPaletteBuilder<32, 2, {
 pub type ADUSixelEncoder64<D = Sierra> = SixelEncoder<ADUPaletteBuilder<64, 4, { 1 << 17 }>, D>;
 pub type ADUSixelEncoder128<D = Sierra> = SixelEncoder<ADUPaletteBuilder<128, 8, { 1 << 17 }>, D>;
 pub type ADUSixelEncoder256<D = Sierra> = SixelEncoder<ADUPaletteBuilder<256, 16, { 1 << 17 }>, D>;
+pub type ADUSixelEncoder256High<D = Sierra> = SixelEncoder<ADUPaletteBuilder, D>;
 pub type ADUSixelEncoder<D = Sierra> = ADUSixelEncoder256<D>;
 
 pub type FocalSixelEncoderMono<D = Sierra> = SixelEncoder<FocalPaletteBuilder<2>, D>;
@@ -108,6 +134,8 @@ pub type FocalSixelEncoder32<D = Sierra> = SixelEncoder<FocalPaletteBuilder<32>,
 pub type FocalSixelEncoder64<D = Sierra> = SixelEncoder<FocalPaletteBuilder<64>, D>;
 pub type FocalSixelEncoder128<D = Sierra> = SixelEncoder<FocalPaletteBuilder<128>, D>;
 pub type FocalSixelEncoder256<D = Sierra> = SixelEncoder<FocalPaletteBuilder<256>, D>;
+pub type FocalSixelEncoder256High<D = Sierra> =
+    SixelEncoder<FocalPaletteBuilder<256, { 1 << 12 }, { 1 << 22 }>, D>;
 pub type FocalSixelEncoder<D = Sierra> = FocalSixelEncoder256<D>;
 
 pub type MedianCutSixelEncoderMono<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<2>, D>;
@@ -123,6 +151,7 @@ pub type MedianCutSixelEncoder<D = Sierra> = MedianCutSixelEncoder256<D>;
 impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
     pub fn encode(image: RgbImage) -> String {
         let palette = P::build_palette(&image);
+
         let mut sixel_string = r#"Pq"1;1;"#.to_string();
         sixel_string
             .write_fmt(format_args!("{};{}", image.height(), image.width()))

@@ -1,4 +1,3 @@
-use core::f32;
 use std::{
     collections::HashSet,
     f32::consts::{
@@ -53,11 +52,20 @@ use crate::{
     rgb_to_lab,
 };
 
-pub struct FocalPaletteBuilder<const PALETTE_SIZE: usize = 256>;
+pub struct FocalPaletteBuilder<
+    const PALETTE_SIZE: usize = 256,
+    const THETA: usize = 2,
+    const STEPS: usize = 131072,
+>;
 
-impl<const PALETTE_SIZE: usize> private::Sealed for FocalPaletteBuilder<PALETTE_SIZE> {}
+impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> private::Sealed
+    for FocalPaletteBuilder<PALETTE_SIZE, THETA, STEPS>
+{
+}
 
-impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_SIZE> {
+impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteBuilder
+    for FocalPaletteBuilder<PALETTE_SIZE, THETA, STEPS>
+{
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     #[inline(never)]
@@ -429,17 +437,15 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
         let strength = 1.0 - 0.3 * avg_local_dist - 0.7 * avg_dist * avg_local_dist;
         let skew = |x: f32| x.powf(1.0 / E.powf(strength));
 
-        let wc_thresh = 2;
         let alpha = (1.0 + avg_local_dist - avg_dist)
             .abs()
             .sqrt()
             .clamp(0.125, 0.5);
         let mut wc = [0; PALETTE_SIZE];
 
-        const MIN_STEPS: u32 = 1 << 17;
         let mut idx = 0;
-        while idx < MIN_STEPS / 4 || palette.len() < PALETTE_SIZE {
-            let samples = sample_4d(idx % (1 << 16), 0, idx / (1 << 16));
+        while idx < STEPS / 4 || palette.len() < PALETTE_SIZE {
+            let samples = sample_4d(idx as u32 % (1 << 16), 0, idx as u32 / (1 << 16));
             idx += 1;
             for candidate in samples {
                 let candidate = skew(candidate);
@@ -482,7 +488,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
 
                 wc[winner.item] += 1;
 
-                if wc[winner.item] >= wc_thresh && palette.len() < PALETTE_SIZE {
+                if wc[winner.item] >= THETA && palette.len() < PALETTE_SIZE {
                     tree.add(
                         &[candidate.l, candidate.a, candidate.b, w, weight_term],
                         palette.len(),

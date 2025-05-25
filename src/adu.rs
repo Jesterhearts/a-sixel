@@ -19,11 +19,25 @@ use crate::{
     rgb_to_lab,
 };
 
+/// See https://faculty.uca.edu/ecelebi/documents/ISJ_2014.pdf for the original paper on this algorithm.
+/// This does slightly different parameters than the paper, but the algorithm is
+/// the same core idea and these parameters work well enough. See the code for
+/// the type aliases (e.g. [`ADUSixelEncoder`](crate::ADUSixelEncoder)) for more
+/// default paremeters.
+///
+/// The parameters from the paper for a 256 color palette are:
+/// - THETA = (400 * 256^0.5) = 6400
+/// - STEPS = (2 * 256 - 3) * THETA = 3257600
+/// - GAMMA = 0.015 or GAMMA_DIV ~= 64
+///
+/// as is specified by the default arguments to this struct. The type aliases
+/// use signficantly lower values because they are much (up to 10x) faster while
+/// still having pretty good results.
 pub struct ADUPaletteBuilder<
     const PALETTE_SIZE: usize = 256,
-    const THETA: usize = 16,
-    const STEPS: usize = 4096,
-    const GAMMA_DIV: usize = 8,
+    const THETA: usize = 6400,
+    const STEPS: usize = 3257600,
+    const GAMMA_DIV: usize = 64,
 >;
 
 impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize, const GAMMA_DIV: usize>

@@ -17,6 +17,17 @@ use crate::{
     rgb_to_lab,
 };
 
+/// https://en.wikipedia.org/wiki/Median_cut
+///
+/// Does a simple median cut over the input pixels.
+/// - Find the bucket of pixels with the largest range on one of the three axes
+///   (L, a, b).
+/// - Sort the pixels in that bucket by that axis.
+/// - Split the bucket in half at the median and create a new bucket for the
+///   second half.
+/// - Repeat until the desired number of buckets is reached.
+///
+/// The resulting palette is the average color of each bucket.
 pub struct MedianCutPaletteBuilder<const PALETTE_SIZE: usize = 256>;
 impl<const PALETTE_SIZE: usize> private::Sealed for MedianCutPaletteBuilder<PALETTE_SIZE> {}
 impl<const PALETTE_SIZE: usize> PaletteBuilder for MedianCutPaletteBuilder<PALETTE_SIZE> {

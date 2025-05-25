@@ -1,8 +1,11 @@
-use core::f32;
-
 use image::RgbImage;
 use kiddo::float::kdtree::KdTree;
 use palette::Lab;
+use rayon::iter::{
+    IndexedParallelIterator,
+    IntoParallelIterator,
+    ParallelIterator,
+};
 
 use crate::{
     private,
@@ -10,6 +13,9 @@ use crate::{
 };
 
 /// https://tannerhelland.com/2012/12/28/dithering-eleven-algorithms-source-code.html
+///
+/// Each struct in this module implements this trait and can be combined with
+/// the [`SixelEncoder`](crate::SixelEncoder) struct to dither the result.
 pub trait Dither: private::Sealed {
     const KERNEL: &[(isize, isize, f32)];
     const DIV: f32;
@@ -65,11 +71,35 @@ pub trait Dither: private::Sealed {
     }
 }
 
+/// Do not perform dithering. This is the fastest possible palette encoding
+/// option.
 pub struct NoDither;
 impl private::Sealed for NoDither {}
 impl Dither for NoDither {
     const DIV: f32 = 1.0;
     const KERNEL: &[(isize, isize, f32)] = &[];
+
+    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
+        let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
+
+        let mut palette = KdTree::<_, _, 3, 32, u32>::with_capacity(in_palette.len());
+
+        for (idx, color) in in_palette.iter().enumerate() {
+            palette.add(color.as_ref(), idx);
+        }
+
+        let mut result = vec![0; image.width() as usize * image.height() as usize];
+        pixels
+            .into_par_iter()
+            .zip(&mut result)
+            .for_each(|(p, dest)| {
+                *dest = palette
+                    .nearest_one::<kiddo::SquaredEuclidean>(&[p.l, p.a, p.b])
+                    .item;
+            });
+
+        result
+    }
 }
 
 pub struct Sierra;
