@@ -75,7 +75,7 @@ use crate::{
 ///    a window of size ln(pixels.len()) / 2. This is used to help identify
 ///    edges and features in the image.
 /// 4. Compute the final weight for each pixel as a combination of the saliency
-///    maps and the local distance: lerp(sr.max(mod_sr), p, a, ld) where sr is
+///    maps and the local distance: lerp(a, sr.max(mod_sr), p, ld) where sr is
 ///    the spectral residual, mod_sr is the modulated spectral residual, p is
 ///    the phase spectrum, a is the amplitude spectrum, and ld is the local
 ///    distance.
