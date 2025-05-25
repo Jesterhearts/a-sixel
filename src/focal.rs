@@ -688,12 +688,13 @@ fn compute_saliency(
             .copied()
             .zip(&mut filtered)
             .for_each(|(a, dest)| {
-                *dest = (a - min_amplitude) / (max_amplitude - min_amplitude).max(f32::EPSILON);
+                *dest = ((a - min_amplitude) / (max_amplitude - min_amplitude).max(f32::EPSILON)
+                    - 0.5)
+                    * 2.0;
             });
 
         filtered.par_iter_mut().for_each(|a: &mut f32| {
-            *a = ((*a * PI / 2.0).cos().powi(5) + (*a * PI / 2.0).sin().powi(15))
-                * (max_amplitude - min_amplitude)
+            *a = ((*a * PI / 2.0).sin().powi(15) / 2.0 + 0.5) * (max_amplitude - min_amplitude)
                 + min_amplitude;
         });
 

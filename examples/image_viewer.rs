@@ -70,7 +70,7 @@ fn main() -> anyhow::Result<()> {
             24..48 => <ADUSixelEncoder32>::encode(image),
             48..86 => <ADUSixelEncoder64>::encode(image),
             86..192 => <ADUSixelEncoder128>::encode(image),
-            192..256 => <ADUSixelEncoder256>::encode(image),
+            192..=256 => <ADUSixelEncoder256>::encode(image),
             _ => <ADUSixelEncoder256High>::encode(image),
         },
         PaletteFormat::Focal => match args.palette_size {
@@ -81,7 +81,7 @@ fn main() -> anyhow::Result<()> {
             24..48 => <FocalSixelEncoder32>::encode(image),
             48..86 => <FocalSixelEncoder64>::encode(image),
             86..192 => <FocalSixelEncoder128>::encode(image),
-            192..256 => <FocalSixelEncoder256>::encode(image),
+            192..=256 => <FocalSixelEncoder256>::encode(image),
             _ => <FocalSixelEncoder256High>::encode(image),
         },
         PaletteFormat::MedianCut => match args.palette_size {
