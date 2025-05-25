@@ -139,6 +139,21 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteB
             dump_intermediate("l_sr_aliency", &quant_l_saliency, image_width, image_height);
 
             l_saliency
+                .mod_spectral_residual
+                .par_iter()
+                .copied()
+                .zip(&mut quant_l_saliency)
+                .for_each(|(d, dest)| {
+                    *dest = (d * u8::MAX as f32).round() as u8;
+                });
+            dump_intermediate(
+                "l_mod_sr_saliency",
+                &quant_l_saliency,
+                image_width,
+                image_height,
+            );
+
+            l_saliency
                 .phase_spectrum
                 .par_iter()
                 .copied()
@@ -189,6 +204,21 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteB
             );
 
             a_saliency
+                .mod_spectral_residual
+                .par_iter()
+                .copied()
+                .zip(&mut quant_a_saliency)
+                .for_each(|(d, dest)| {
+                    *dest = (d * u8::MAX as f32).round() as u8;
+                });
+            dump_intermediate(
+                "a_mod_sr_saliency",
+                &quant_a_saliency,
+                image_width,
+                image_height,
+            );
+
+            a_saliency
                 .phase_spectrum
                 .par_iter()
                 .copied()
@@ -233,6 +263,21 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteB
                 });
             dump_intermediate(
                 "b_sr_saliency",
+                &quant_b_saliency,
+                image_width,
+                image_height,
+            );
+
+            b_saliency
+                .mod_spectral_residual
+                .par_iter()
+                .copied()
+                .zip(&mut quant_b_saliency)
+                .for_each(|(d, dest)| {
+                    *dest = (d * u8::MAX as f32).round() as u8;
+                });
+            dump_intermediate(
+                "b_mod_sr_saliency",
                 &quant_b_saliency,
                 image_width,
                 image_height,
@@ -377,22 +422,47 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteB
         pixels
             .into_par_iter()
             .zip(l_saliency.spectral_residual)
+            .zip(l_saliency.mod_spectral_residual)
             .zip(l_saliency.phase_spectrum)
             .zip(l_saliency.amplitude_spectrum)
             .zip(a_saliency.spectral_residual)
+            .zip(a_saliency.mod_spectral_residual)
             .zip(a_saliency.phase_spectrum)
             .zip(a_saliency.amplitude_spectrum)
             .zip(b_saliency.spectral_residual)
+            .zip(b_saliency.mod_spectral_residual)
             .zip(b_saliency.phase_spectrum)
             .zip(b_saliency.amplitude_spectrum)
             .zip(local_dists)
             .zip(&mut candidates)
             .for_each(
                 |(
-                    ((((((((((lab, l_sr), l_p), l_a), a_sr), a_p), a_a), b_sr), b_p), b_a), local),
+                    (
+                        (
+                            (
+                                (
+                                    (
+                                        (
+                                            (
+                                                ((((((lab, l_sr), l_msr), l_p), l_a), a_sr), a_msr),
+                                                a_p,
+                                            ),
+                                            a_a,
+                                        ),
+                                        b_sr,
+                                    ),
+                                    b_msr,
+                                ),
+                                b_p,
+                            ),
+                            b_a,
+                        ),
+                        local,
+                    ),
                     dest,
                 )| {
-                    let outliers = l_sr.max(a_sr).max(b_sr);
+                    let outlier_outlier = l_msr.max(a_msr).max(b_msr);
+                    let outliers = l_sr.max(a_sr).max(b_sr).max(outlier_outlier);
                     let edges = l_p.max(a_p).max(b_p);
                     let blobs = l_a.max(a_a).max(b_a);
 
@@ -519,6 +589,7 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteB
 
 struct Saliency {
     spectral_residual: Vec<f32>,
+    mod_spectral_residual: Vec<f32>,
     phase_spectrum: Vec<f32>,
     amplitude_spectrum: Vec<f32>,
 }
@@ -679,28 +750,25 @@ fn compute_saliency(
         .zip(&mut phase)
         .for_each(|(c, dest)| *dest = c.arg());
 
-    let asr = {
-        let mut filtered = vec![0.0f32; phase.len()];
-        let max_amplitude = amplitude.par_iter().copied().reduce(|| f32::MIN, f32::max);
-        let min_amplitude = amplitude.par_iter().copied().reduce(|| f32::MAX, f32::min);
-        amplitude
-            .par_iter()
-            .copied()
-            .zip(&mut filtered)
-            .for_each(|(a, dest)| {
-                *dest = ((a - min_amplitude) / (max_amplitude - min_amplitude).max(f32::EPSILON)
-                    - 0.5)
-                    * 2.0;
-            });
-
-        filtered.par_iter_mut().for_each(|a: &mut f32| {
-            *a = ((*a * PI / 2.0).sin().powi(15) / 2.0 + 0.5) * (max_amplitude - min_amplitude)
-                + min_amplitude;
+    let mut mod_amplitude = vec![0.0f32; phase.len()];
+    let max_amplitude = amplitude.par_iter().copied().reduce(|| f32::MIN, f32::max);
+    let min_amplitude = amplitude.par_iter().copied().reduce(|| f32::MAX, f32::min);
+    amplitude
+        .par_iter()
+        .copied()
+        .zip(&mut mod_amplitude)
+        .for_each(|(a, dest)| {
+            let x = ((a - min_amplitude) / (max_amplitude - min_amplitude).max(f32::EPSILON) - 0.5)
+                * 2.0;
+            *dest = ((x * PI / 2.0).sin().powi(15) / 2.0 + 0.5) * (max_amplitude - min_amplitude)
+                + min_amplitude
         });
 
+    let asr = {
         let mut ifft_buffer = vec![Complex::zero(); phase.len()];
-        filtered
-            .into_par_iter()
+        mod_amplitude
+            .par_iter()
+            .copied()
             .zip(&phase)
             .zip(&mut ifft_buffer)
             .for_each(|((a, p), dest)| {
@@ -816,7 +884,7 @@ fn compute_saliency(
             let mut buffer = vec![Complex::zero(); residual.len()];
             residual
                 .into_par_iter()
-                .zip(phase)
+                .zip(phase.par_iter())
                 .zip(&mut buffer)
                 .for_each(|((a, p), dest)| {
                     *dest = Complex {
@@ -895,8 +963,134 @@ fn compute_saliency(
         saliency
     };
 
+    let msr = {
+        let mut log_amplitude = vec![0.0f32; phase.len()];
+        mod_amplitude
+            .into_par_iter()
+            .zip(&mut log_amplitude)
+            .for_each(|(a, dest)| *dest = a.max(f32::EPSILON).ln());
+
+        let mut log_blurred = log_amplitude.clone();
+
+        {
+            let mut amplitude = BlurImageMut::borrow(
+                &mut log_blurred,
+                image_width,
+                image_height,
+                FastBlurChannels::Plane,
+            );
+            stack_blur_f32(
+                &mut amplitude,
+                AnisotropicRadius::new(window_radius),
+                ThreadingPolicy::Adaptive,
+            )
+            .unwrap();
+        }
+
+        let mut residual = vec![0.0f32; image_width as usize * image_height as usize];
+        log_amplitude
+            .into_par_iter()
+            .zip(log_blurred)
+            .zip(&mut residual)
+            .for_each(|((a, b), dest)| {
+                *dest = a - b;
+            });
+
+        let mut mod_phase = vec![0.0f32; phase.len()];
+
+        let max_phase = phase.par_iter().copied().reduce(|| f32::MIN, f32::max);
+        let min_phase = phase.par_iter().copied().reduce(|| f32::MAX, f32::min);
+
+        phase
+            .into_par_iter()
+            .zip(&mut mod_phase)
+            .for_each(|(p, dest)| {
+                let x = ((p - min_phase) / (max_phase - min_phase).max(f32::EPSILON) - 0.5) * 2.0;
+                *dest = ((x * PI / 2.0).sin().powi(15) / 2.0 + 0.5) * (max_phase - min_phase)
+                    + min_phase;
+            });
+
+        let mut msr_buffer = vec![Complex::zero(); mod_phase.len()];
+        residual
+            .into_par_iter()
+            .zip(mod_phase)
+            .zip(&mut msr_buffer)
+            .for_each(|((a, p), dest)| {
+                *dest = Complex {
+                    re: a * p.cos(),
+                    im: a * p.sin(),
+                };
+            });
+
+        let ifft_row = planner.plan_fft_inverse(image_width as usize);
+        let ifft_col = planner.plan_fft_inverse(image_height as usize);
+        msr_buffer
+            .par_chunks_mut(image_height as usize)
+            .for_each(|chunk| {
+                ifft_col.process(chunk);
+            });
+
+        let mut transpose = vec![Complex::zero(); msr_buffer.len()];
+        (0..image_width as usize)
+            .into_par_iter()
+            .zip(transpose.par_chunks_mut(image_height as usize))
+            .for_each(|(x, col)| {
+                (0..image_height as usize)
+                    .into_par_iter()
+                    .zip(col)
+                    .for_each(|(y, dest)| {
+                        *dest = msr_buffer[y * image_width as usize + x];
+                    });
+            });
+
+        transpose
+            .par_chunks_mut(image_height as usize)
+            .for_each(|chunk| {
+                ifft_row.process(chunk);
+            });
+
+        (0..image_height as usize)
+            .into_par_iter()
+            .zip(msr_buffer.par_chunks_mut(image_width as usize))
+            .for_each(|(y, row)| {
+                (0..image_width as usize)
+                    .into_par_iter()
+                    .zip(row)
+                    .for_each(|(x, dest)| {
+                        *dest = transpose[x * image_height as usize + y];
+                    });
+            });
+
+        let mut msr = vec![0.0f32; transpose.len()];
+        transpose
+            .par_iter()
+            .copied()
+            .zip(&mut msr)
+            .for_each(|(c, dest)| *dest = c.norm_sqr());
+
+        {
+            let mut msr =
+                BlurImageMut::borrow(&mut msr, image_width, image_height, FastBlurChannels::Plane);
+            stack_blur_f32(
+                &mut msr,
+                AnisotropicRadius::new(window_radius),
+                ThreadingPolicy::Adaptive,
+            )
+            .unwrap();
+        }
+
+        let max_msr = msr.par_iter().copied().reduce(|| f32::MIN, f32::max);
+        let min_msr = msr.par_iter().copied().reduce(|| f32::MAX, f32::min);
+        msr.par_iter_mut().for_each(|s| {
+            *s = (*s - min_msr) / (max_msr - min_msr).max(f32::EPSILON);
+        });
+
+        msr
+    };
+
     Saliency {
         spectral_residual: sr,
+        mod_spectral_residual: msr,
         phase_spectrum: pft,
         amplitude_spectrum: asr,
     }
