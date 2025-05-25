@@ -1,8 +1,8 @@
 mod adu;
+mod bit;
 pub mod dither;
 mod focal;
 mod median_cut;
-mod octree;
 
 use std::fmt::Write;
 
@@ -30,9 +30,9 @@ use crate::dither::{
 };
 pub use crate::{
     adu::ADUPaletteBuilder,
+    bit::BitPaletteBuilder,
     focal::FocalPaletteBuilder,
     median_cut::MedianCutPaletteBuilder,
-    octree::OctreePaletteBuilder,
 };
 
 struct SixelRow<'c> {
@@ -157,15 +157,15 @@ pub type MedianCutSixelEncoder128<D = Sierra> = SixelEncoder<MedianCutPaletteBui
 pub type MedianCutSixelEncoder256<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<256>, D>;
 pub type MedianCutSixelEncoder<D = Sierra> = MedianCutSixelEncoder256<D>;
 
-pub type OctreeSixelEncoderMono<D = Sierra> = SixelEncoder<OctreePaletteBuilder<2>, D>;
-pub type OctreeSixelEncoder4<D = Sierra> = SixelEncoder<OctreePaletteBuilder<4>, D>;
-pub type OctreeSixelEncoder8<D = Sierra> = SixelEncoder<OctreePaletteBuilder<8>, D>;
-pub type OctreeSixelEncoder16<D = Sierra> = SixelEncoder<OctreePaletteBuilder<16>, D>;
-pub type OctreeSixelEncoder32<D = Sierra> = SixelEncoder<OctreePaletteBuilder<32>, D>;
-pub type OctreeSixelEncoder64<D = Sierra> = SixelEncoder<OctreePaletteBuilder<64>, D>;
-pub type OctreeSixelEncoder128<D = Sierra> = SixelEncoder<OctreePaletteBuilder<128>, D>;
-pub type OctreeSixelEncoder256<D = Sierra> = SixelEncoder<OctreePaletteBuilder<256>, D>;
-pub type OctreeSixelEncoder<D = Sierra> = OctreeSixelEncoder256<D>;
+pub type BitSixelEncoderMono<D = Sierra> = SixelEncoder<BitPaletteBuilder<2>, D>;
+pub type BitSixelEncoder4<D = Sierra> = SixelEncoder<BitPaletteBuilder<4>, D>;
+pub type BitSixelEncoder8<D = Sierra> = SixelEncoder<BitPaletteBuilder<8>, D>;
+pub type BitSixelEncoder16<D = Sierra> = SixelEncoder<BitPaletteBuilder<16>, D>;
+pub type BitSixelEncoder32<D = Sierra> = SixelEncoder<BitPaletteBuilder<32>, D>;
+pub type BitSixelEncoder64<D = Sierra> = SixelEncoder<BitPaletteBuilder<64>, D>;
+pub type BitSixelEncoder128<D = Sierra> = SixelEncoder<BitPaletteBuilder<128>, D>;
+pub type BitSixelEncoder256<D = Sierra> = SixelEncoder<BitPaletteBuilder<256>, D>;
+pub type BitSixelEncoder<D = Sierra> = BitSixelEncoder256<D>;
 
 impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
     pub fn encode(image: RgbImage) -> String {

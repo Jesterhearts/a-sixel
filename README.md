@@ -3,13 +3,13 @@
 ## Choosing an Encoder
 - I want fast encoding with good quality:
   - Use `ADUSixelEncoder`
-  - `OctreeSixelEncoder` can also produce pretty good results for 256 colors depending on the image
+  - `BitSixelEncoder` can also produce pretty good results for 256 colors depending on the image
     while being over 10x faster.
 - I'm time constrained:
-  - Use `ADUSixelEncoder` or `OctreeSixelEncoder`. You can customize `ADU` by lowering the `STEPS`
+  - Use `ADUSixelEncoder` or `BitSixelEncoder`. You can customize `ADU` by lowering the `STEPS`
     parameter to run faster if necessary while still getting good results.
 - No, I'm _really_ time constrained and can sacrifice a little quality:
-  - Use `OctreeSixelEncoder<NoDither>`.
+  - Use `BitSixelEncoder<NoDither>`.
 - I want high quality encoding, and don't mind a bit more computation:
   - Use `FocalSixelEncoder`.
   - This matters a lot less if you're not crunching the palette down below 256 colors.

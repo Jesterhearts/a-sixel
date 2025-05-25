@@ -8,6 +8,14 @@ use a_sixel::{
     ADUSixelEncoder128,
     ADUSixelEncoder256,
     ADUSixelEncoder256High,
+    BitSixelEncoder4,
+    BitSixelEncoder8,
+    BitSixelEncoder16,
+    BitSixelEncoder32,
+    BitSixelEncoder64,
+    BitSixelEncoder128,
+    BitSixelEncoder256,
+    BitSixelEncoderMono,
     FocalSixelEncoder4,
     FocalSixelEncoder8,
     FocalSixelEncoder16,
@@ -25,14 +33,6 @@ use a_sixel::{
     MedianCutSixelEncoder128,
     MedianCutSixelEncoder256,
     MedianCutSixelEncoderMono,
-    OctreeSixelEncoder4,
-    OctreeSixelEncoder8,
-    OctreeSixelEncoder16,
-    OctreeSixelEncoder32,
-    OctreeSixelEncoder64,
-    OctreeSixelEncoder128,
-    OctreeSixelEncoder256,
-    OctreeSixelEncoderMono,
     dither::NoDither,
 };
 use clap::Parser;
@@ -47,7 +47,7 @@ enum PaletteFormat {
     Adu,
     Focal,
     MedianCut,
-    Octree,
+    Bit,
 }
 
 #[derive(Debug, Parser)]
@@ -104,16 +104,16 @@ fn main() -> anyhow::Result<()> {
             86..192 => <MedianCutSixelEncoder128>::encode(image),
             _ => <MedianCutSixelEncoder256>::encode(image),
         },
-        PaletteFormat::Octree => match args.palette_size {
-            0 => <OctreeSixelEncoder256<NoDither>>::encode(image),
-            1..3 => <OctreeSixelEncoderMono>::encode(image),
-            3..6 => <OctreeSixelEncoder4>::encode(image),
-            6..12 => <OctreeSixelEncoder8>::encode(image),
-            12..24 => <OctreeSixelEncoder16>::encode(image),
-            24..48 => <OctreeSixelEncoder32>::encode(image),
-            48..86 => <OctreeSixelEncoder64>::encode(image),
-            86..192 => <OctreeSixelEncoder128>::encode(image),
-            _ => <OctreeSixelEncoder256>::encode(image),
+        PaletteFormat::Bit => match args.palette_size {
+            0 => <BitSixelEncoder256<NoDither>>::encode(image),
+            1..3 => <BitSixelEncoderMono>::encode(image),
+            3..6 => <BitSixelEncoder4>::encode(image),
+            6..12 => <BitSixelEncoder8>::encode(image),
+            12..24 => <BitSixelEncoder16>::encode(image),
+            24..48 => <BitSixelEncoder32>::encode(image),
+            48..86 => <BitSixelEncoder64>::encode(image),
+            86..192 => <BitSixelEncoder128>::encode(image),
+            _ => <BitSixelEncoder256>::encode(image),
         },
     };
 

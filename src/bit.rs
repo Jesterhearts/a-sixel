@@ -14,24 +14,27 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
-struct Node {
+struct Bucket {
     color: (u64, u64, u64),
     count: usize,
 }
 
+/// Encodes a palette by bucketing bit ranges into a power of two number of
+/// buckets. This is very fast and produces ok results for most images at larger
+/// palette sizes (e.g. 256).
 #[derive(Debug)]
-pub struct OctreePaletteBuilder<const PALETTE_DEPTH: usize> {
-    octree: Vec<Node>,
+pub struct BitPaletteBuilder<const PALETTE_SIZE: usize> {
+    buckets: Vec<Bucket>,
 }
 
-impl<const PALETTE_SIZE: usize> OctreePaletteBuilder<PALETTE_SIZE> {
+impl<const PALETTE_SIZE: usize> BitPaletteBuilder<PALETTE_SIZE> {
     const PALETTE_DEPTH: usize = PALETTE_SIZE.ilog2() as usize;
     const SHIFT: usize = 24 - Self::PALETTE_DEPTH;
 
     fn new() -> Self {
-        OctreePaletteBuilder {
-            octree: vec![
-                Node {
+        BitPaletteBuilder {
+            buckets: vec![
+                Bucket {
                     color: (0, 0, 0),
                     count: 0,
                 };
@@ -54,7 +57,7 @@ impl<const PALETTE_SIZE: usize> OctreePaletteBuilder<PALETTE_SIZE> {
             (rgb >> Self::SHIFT) as usize
         };
 
-        let node = &mut self.octree[index];
+        let node = &mut self.buckets[index];
         node.color.0 += color.red as u64;
         node.color.1 += color.green as u64;
         node.color.2 += color.blue as u64;
@@ -62,8 +65,8 @@ impl<const PALETTE_SIZE: usize> OctreePaletteBuilder<PALETTE_SIZE> {
     }
 }
 
-impl<const PALETTE_SIZE: usize> private::Sealed for OctreePaletteBuilder<PALETTE_SIZE> {}
-impl<const PALETTE_SIZE: usize> PaletteBuilder for OctreePaletteBuilder<PALETTE_SIZE> {
+impl<const PALETTE_SIZE: usize> private::Sealed for BitPaletteBuilder<PALETTE_SIZE> {}
+impl<const PALETTE_SIZE: usize> PaletteBuilder for BitPaletteBuilder<PALETTE_SIZE> {
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     fn build_palette(image: &image::RgbImage) -> Vec<Lab> {
@@ -74,7 +77,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for OctreePaletteBuilder<PALETTE_
         }
 
         builder
-            .octree
+            .buckets
             .into_iter()
             .filter(|node| node.count > 0)
             .map(|node| {
