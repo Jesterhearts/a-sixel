@@ -1,11 +1,14 @@
 use image::RgbImage;
 use ordered_float::NotNan;
 use palette::Lab;
-use rayon::iter::{
-    IndexedParallelIterator,
-    IntoParallelRefIterator,
-    IntoParallelRefMutIterator,
-    ParallelIterator,
+use rayon::{
+    iter::{
+        IndexedParallelIterator,
+        IntoParallelRefIterator,
+        IntoParallelRefMutIterator,
+        ParallelIterator,
+    },
+    slice::ParallelSliceMut,
 };
 
 use crate::{
@@ -37,22 +40,39 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for MedianCutPaletteBuilder<PALET
                     } else {
                         let (min, max) = candidates.iter().copied().fold(
                             (
-                                Lab::new(
-                                    min.l.min(color.l),
-                                    min.a.min(color.a),
-                                    min.b.min(color.b),
-                                ),
-                                Lab::new(
-                                    max.l.max(color.l),
-                                    max.a.max(color.a),
-                                    max.b.max(color.b),
-                                ),
-                            )
-                        },
-                    );
-                    *stats = Some((min, max));
-                    (min, max)
-                };
+                                <Lab>::new(f32::MAX, f32::MAX, f32::MAX),
+                                <Lab>::new(f32::MIN, f32::MIN, f32::MIN),
+                            ),
+                            |(min, max), color| {
+                                (
+                                    Lab::new(
+                                        min.l.min(color.l),
+                                        min.a.min(color.a),
+                                        min.b.min(color.b),
+                                    ),
+                                    Lab::new(
+                                        max.l.max(color.l),
+                                        max.a.max(color.a),
+                                        max.b.max(color.b),
+                                    ),
+                                )
+                            },
+                        );
+                        *stats = Some((min, max));
+                        (min, max)
+                    };
+
+                    let range = [
+                        (max.l - min.l) / (<Lab>::max_l() - <Lab>::min_l()),
+                        (max.a - min.a) / (<Lab>::max_a() - <Lab>::min_a()),
+                        (max.b - min.b) / (<Lab>::max_b() - <Lab>::min_b()),
+                    ];
+                    let max_range_idx = range
+                        .iter()
+                        .enumerate()
+                        .max_by_key(|(_, diff)| NotNan::new(**diff).unwrap())
+                        .map(|(idx, _)| idx)
+                        .unwrap();
 
                     (idx, max_range_idx, range[max_range_idx])
                 })
@@ -64,7 +84,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for MedianCutPaletteBuilder<PALET
                 );
 
             let candidates = &mut buckets[best_bucket];
-            candidates.sort_by(|a, b| match max_idx {
+            candidates.par_sort_by(|a, b| match max_idx {
                 0 => a.l.total_cmp(&b.l),
                 1 => a.a.total_cmp(&b.a),
                 2 => a.b.total_cmp(&b.b),
