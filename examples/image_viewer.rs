@@ -33,7 +33,10 @@ use a_sixel::{
     MedianCutSixelEncoder128,
     MedianCutSixelEncoder256,
     MedianCutSixelEncoderMono,
-    dither::NoDither,
+    dither::{
+        NoDither,
+        Sobol,
+    },
 };
 use clap::Parser;
 use strum::{
@@ -64,6 +67,10 @@ struct Args {
     /// The palette generator to use.
     #[clap(long, short = 'f', default_value_t = PaletteFormat::Focal)]
     palette_format: PaletteFormat,
+
+    /// Whether to use Sobol dithering instead of the default dithering.
+    #[clap(long, short, default_value_t = false)]
+    sobol: bool,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -75,45 +82,237 @@ fn main() -> anyhow::Result<()> {
 
     let six = match args.palette_format {
         PaletteFormat::Adu => match args.palette_size {
-            0..12 => <ADUSixelEncoder8>::encode(image),
-            12..24 => <ADUSixelEncoder16>::encode(image),
-            24..48 => <ADUSixelEncoder32>::encode(image),
-            48..86 => <ADUSixelEncoder64>::encode(image),
-            86..192 => <ADUSixelEncoder128>::encode(image),
-            192..=256 => <ADUSixelEncoder256>::encode(image),
-            _ => <ADUSixelEncoder256High>::encode(image),
+            0..12 => {
+                if args.sobol {
+                    <ADUSixelEncoder8<Sobol>>::encode(image)
+                } else {
+                    <ADUSixelEncoder8>::encode(image)
+                }
+            }
+            12..24 => {
+                if args.sobol {
+                    <ADUSixelEncoder16<Sobol>>::encode(image)
+                } else {
+                    <ADUSixelEncoder16>::encode(image)
+                }
+            }
+            24..48 => {
+                if args.sobol {
+                    <ADUSixelEncoder32<Sobol>>::encode(image)
+                } else {
+                    <ADUSixelEncoder32>::encode(image)
+                }
+            }
+            48..86 => {
+                if args.sobol {
+                    <ADUSixelEncoder64<Sobol>>::encode(image)
+                } else {
+                    <ADUSixelEncoder64>::encode(image)
+                }
+            }
+            86..192 => {
+                if args.sobol {
+                    <ADUSixelEncoder128<Sobol>>::encode(image)
+                } else {
+                    <ADUSixelEncoder128>::encode(image)
+                }
+            }
+            192..=256 => {
+                if args.sobol {
+                    <ADUSixelEncoder256<Sobol>>::encode(image)
+                } else {
+                    <ADUSixelEncoder256>::encode(image)
+                }
+            }
+            _ => {
+                if args.sobol {
+                    <ADUSixelEncoder256High<Sobol>>::encode(image)
+                } else {
+                    <ADUSixelEncoder256High>::encode(image)
+                }
+            }
         },
         PaletteFormat::Focal => match args.palette_size {
-            0..3 => <FocalSixelEncoderMono>::encode(image),
-            3..6 => <FocalSixelEncoder4>::encode(image),
-            6..12 => <FocalSixelEncoder8>::encode(image),
-            12..24 => <FocalSixelEncoder16>::encode(image),
-            24..48 => <FocalSixelEncoder32>::encode(image),
-            48..86 => <FocalSixelEncoder64>::encode(image),
-            86..192 => <FocalSixelEncoder128>::encode(image),
-            192..=256 => <FocalSixelEncoder256>::encode(image),
-            _ => <FocalSixelEncoder256High>::encode(image),
+            0..3 => {
+                if args.sobol {
+                    <FocalSixelEncoderMono<Sobol>>::encode(image)
+                } else {
+                    <FocalSixelEncoderMono>::encode(image)
+                }
+            }
+            3..6 => {
+                if args.sobol {
+                    <FocalSixelEncoder4<Sobol>>::encode(image)
+                } else {
+                    <FocalSixelEncoder4>::encode(image)
+                }
+            }
+            6..12 => {
+                if args.sobol {
+                    <FocalSixelEncoder8<Sobol>>::encode(image)
+                } else {
+                    <FocalSixelEncoder8>::encode(image)
+                }
+            }
+            12..24 => {
+                if args.sobol {
+                    <FocalSixelEncoder16<Sobol>>::encode(image)
+                } else {
+                    <FocalSixelEncoder16>::encode(image)
+                }
+            }
+            24..48 => {
+                if args.sobol {
+                    <FocalSixelEncoder32<Sobol>>::encode(image)
+                } else {
+                    <FocalSixelEncoder32>::encode(image)
+                }
+            }
+            48..86 => {
+                if args.sobol {
+                    <FocalSixelEncoder64<Sobol>>::encode(image)
+                } else {
+                    <FocalSixelEncoder64>::encode(image)
+                }
+            }
+            86..192 => {
+                if args.sobol {
+                    <FocalSixelEncoder128<Sobol>>::encode(image)
+                } else {
+                    <FocalSixelEncoder128>::encode(image)
+                }
+            }
+            192..=256 => {
+                if args.sobol {
+                    <FocalSixelEncoder256<Sobol>>::encode(image)
+                } else {
+                    <FocalSixelEncoder256>::encode(image)
+                }
+            }
+            _ => {
+                if args.sobol {
+                    <FocalSixelEncoder256High<Sobol>>::encode(image)
+                } else {
+                    <FocalSixelEncoder256High>::encode(image)
+                }
+            }
         },
         PaletteFormat::MedianCut => match args.palette_size {
-            0..3 => <MedianCutSixelEncoderMono>::encode(image),
-            3..6 => <MedianCutSixelEncoder4>::encode(image),
-            6..12 => <MedianCutSixelEncoder8>::encode(image),
-            12..24 => <MedianCutSixelEncoder16>::encode(image),
-            24..48 => <MedianCutSixelEncoder32>::encode(image),
-            48..86 => <MedianCutSixelEncoder64>::encode(image),
-            86..192 => <MedianCutSixelEncoder128>::encode(image),
-            _ => <MedianCutSixelEncoder256>::encode(image),
+            0..3 => {
+                if args.sobol {
+                    <MedianCutSixelEncoderMono<Sobol>>::encode(image)
+                } else {
+                    <MedianCutSixelEncoderMono>::encode(image)
+                }
+            }
+            3..6 => {
+                if args.sobol {
+                    <MedianCutSixelEncoder4<Sobol>>::encode(image)
+                } else {
+                    <MedianCutSixelEncoder4>::encode(image)
+                }
+            }
+            6..12 => {
+                if args.sobol {
+                    <MedianCutSixelEncoder8<Sobol>>::encode(image)
+                } else {
+                    <MedianCutSixelEncoder8>::encode(image)
+                }
+            }
+            12..24 => {
+                if args.sobol {
+                    <MedianCutSixelEncoder16<Sobol>>::encode(image)
+                } else {
+                    <MedianCutSixelEncoder16>::encode(image)
+                }
+            }
+            24..48 => {
+                if args.sobol {
+                    <MedianCutSixelEncoder32<Sobol>>::encode(image)
+                } else {
+                    <MedianCutSixelEncoder32>::encode(image)
+                }
+            }
+            48..86 => {
+                if args.sobol {
+                    <MedianCutSixelEncoder64<Sobol>>::encode(image)
+                } else {
+                    <MedianCutSixelEncoder64>::encode(image)
+                }
+            }
+            86..192 => {
+                if args.sobol {
+                    <MedianCutSixelEncoder128<Sobol>>::encode(image)
+                } else {
+                    <MedianCutSixelEncoder128>::encode(image)
+                }
+            }
+            _ => {
+                if args.sobol {
+                    <MedianCutSixelEncoder256<Sobol>>::encode(image)
+                } else {
+                    <MedianCutSixelEncoder256>::encode(image)
+                }
+            }
         },
         PaletteFormat::Bit => match args.palette_size {
             0 => <BitSixelEncoder256<NoDither>>::encode(image),
-            1..3 => <BitSixelEncoderMono>::encode(image),
-            3..6 => <BitSixelEncoder4>::encode(image),
-            6..12 => <BitSixelEncoder8>::encode(image),
-            12..24 => <BitSixelEncoder16>::encode(image),
-            24..48 => <BitSixelEncoder32>::encode(image),
-            48..86 => <BitSixelEncoder64>::encode(image),
-            86..192 => <BitSixelEncoder128>::encode(image),
-            _ => <BitSixelEncoder256>::encode(image),
+            1..3 => {
+                if args.sobol {
+                    <BitSixelEncoderMono<Sobol>>::encode(image)
+                } else {
+                    <BitSixelEncoderMono>::encode(image)
+                }
+            }
+            3..6 => {
+                if args.sobol {
+                    <BitSixelEncoder4<Sobol>>::encode(image)
+                } else {
+                    <BitSixelEncoder4>::encode(image)
+                }
+            }
+            6..12 => {
+                if args.sobol {
+                    <BitSixelEncoder8<Sobol>>::encode(image)
+                } else {
+                    <BitSixelEncoder8>::encode(image)
+                }
+            }
+            12..24 => {
+                if args.sobol {
+                    <BitSixelEncoder16<Sobol>>::encode(image)
+                } else {
+                    <BitSixelEncoder16>::encode(image)
+                }
+            }
+            24..48 => {
+                if args.sobol {
+                    <BitSixelEncoder32<Sobol>>::encode(image)
+                } else {
+                    <BitSixelEncoder32>::encode(image)
+                }
+            }
+            48..86 => {
+                if args.sobol {
+                    <BitSixelEncoder64<Sobol>>::encode(image)
+                } else {
+                    <BitSixelEncoder64>::encode(image)
+                }
+            }
+            86..192 => {
+                if args.sobol {
+                    <BitSixelEncoder128<Sobol>>::encode(image)
+                } else {
+                    <BitSixelEncoder128>::encode(image)
+                }
+            }
+            _ => {
+                if args.sobol {
+                    <BitSixelEncoder256<Sobol>>::encode(image)
+                } else {
+                    <BitSixelEncoder256>::encode(image)
+                }
+            }
         },
     };
 

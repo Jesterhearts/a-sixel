@@ -190,7 +190,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                 .expect("Failed to palette entry");
         }
 
-        let paletted_pixels = D::dither_and_palettize(&image, &palette);
+        let paletted_pixels = D::dither_and_palettize(&image, &palette, P::PALETTE_SIZE);
 
         let rows: Vec<&[usize]> = paletted_pixels
             .chunks(image.width() as usize)

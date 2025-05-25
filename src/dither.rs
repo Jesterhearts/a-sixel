@@ -10,21 +10,31 @@ use rayon::{
     },
     slice::ParallelSliceMut,
 };
+use sobol_burley::sample_4d;
 
 use crate::{
     private,
     rgb_to_lab,
 };
 
-/// https://tannerhelland.com/2012/12/28/dithering-eleven-algorithms-source-code.html
-///
 /// Each struct in this module implements this trait and can be combined with
 /// the [`SixelEncoder`](crate::SixelEncoder) struct to dither the result.
+///
+/// Most of the dithering algorithms are based on the ones described in
+/// [this article](https://tannerhelland.com/2012/12/28/dithering-eleven-algorithms-source-code.html).
+/// There is also an implementation of the Bayer matrix dithering algorithm
+/// and a Sobol sequence based dithering algorithm.
 pub trait Dither: private::Sealed {
     const KERNEL: &[(isize, isize, f32)];
     const DIV: f32;
 
-    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
+    fn dither_and_palettize(
+        image: &RgbImage,
+        in_palette: &[Lab],
+        target_palette_size: usize,
+    ) -> Vec<usize> {
+        let _ = target_palette_size;
+
         let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
 
         let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
@@ -83,7 +93,7 @@ impl Dither for NoDither {
     const DIV: f32 = 1.0;
     const KERNEL: &[(isize, isize, f32)] = &[];
 
-    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
+    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab], _: usize) -> Vec<usize> {
         let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
 
         let mut palette = KdTree::<_, _, 3, 32, u32>::with_capacity(in_palette.len());
@@ -278,11 +288,14 @@ impl Dither for Bayer {
     const DIV: f32 = 0.0;
     const KERNEL: &[(isize, isize, f32)] = &[];
 
-    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
-        let matrix_size = (1usize << 8)
-            .div_ceil(in_palette.len().div_ceil(3))
-            .next_power_of_two();
-        let r = (in_palette.len().ilog2().div_ceil(3)) as f32;
+    fn dither_and_palettize(
+        image: &RgbImage,
+        in_palette: &[Lab],
+        target_palette_size: usize,
+    ) -> Vec<usize> {
+        let r = (1usize << 8).div_ceil(target_palette_size.div_ceil(3));
+        let matrix_size = r.next_power_of_two();
+        let r = r as f32;
         let mut l_matrix = vec![0.0; matrix_size * matrix_size];
         let mut a_matrix = vec![0.0; matrix_size * matrix_size];
         let mut b_matrix = vec![0.0; matrix_size * matrix_size];
@@ -328,6 +341,51 @@ impl Dither for Bayer {
                 let l = p.l + r * l_matrix[m_idx];
                 let a = p.a + r * a_matrix[m_idx];
                 let b = p.b + r * b_matrix[m_idx];
+
+                *dest = palette
+                    .nearest_one::<kiddo::SquaredEuclidean>(&[l, a, b])
+                    .item;
+            });
+
+        result
+    }
+}
+
+/// Uses the Sobol sequence to perturb the colors in a quasi-random manner. This
+/// is somewhere between ordered dithering and stochastic dithering. The results
+/// are generally decent, although they may appear textured like paper.
+pub struct Sobol;
+impl private::Sealed for Sobol {}
+impl Dither for Sobol {
+    const DIV: f32 = 0.0;
+    const KERNEL: &[(isize, isize, f32)] = &[];
+
+    fn dither_and_palettize(
+        image: &RgbImage,
+        in_palette: &[Lab],
+        target_palette_size: usize,
+    ) -> Vec<usize> {
+        let r = (1usize << 8).div_ceil(target_palette_size * target_palette_size.ilog2() as usize)
+            as f32;
+
+        let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
+        for (idx, color) in in_palette.iter().enumerate() {
+            palette.add(color.as_ref(), idx);
+        }
+
+        let mut result = vec![0; image.width() as usize * image.height() as usize];
+        let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
+
+        pixels
+            .into_par_iter()
+            .enumerate()
+            .zip(&mut result)
+            .for_each(|((idx, p), dest)| {
+                let [l, a, b, _] = sample_4d(idx as u32 % (1 << 16), 0, idx as u32 / (1 << 16));
+
+                let l = p.l + (l - 0.5) * 2.0 * r;
+                let a = p.a + (a - 0.5) * 2.0 * r;
+                let b = p.b + (b - 0.5) * 2.0 * r;
 
                 *dest = palette
                     .nearest_one::<kiddo::SquaredEuclidean>(&[l, a, b])
