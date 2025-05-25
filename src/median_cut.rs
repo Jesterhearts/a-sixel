@@ -1,6 +1,12 @@
 use image::RgbImage;
 use ordered_float::NotNan;
 use palette::Lab;
+use rayon::iter::{
+    IndexedParallelIterator,
+    IntoParallelRefIterator,
+    IntoParallelRefMutIterator,
+    ParallelIterator,
+};
 
 use crate::{
     PaletteBuilder,
@@ -21,21 +27,15 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for MedianCutPaletteBuilder<PALET
         let mut bucket_stats = vec![None; PALETTE_SIZE + 1];
 
         for _ in 0..PALETTE_SIZE - 1 {
-            let mut best_bucket = 0;
-            let mut max_idx = 0;
-            let mut max_range = 0.0;
-            for (idx, (candidates, stats)) in
-                buckets.iter().zip(bucket_stats.iter_mut()).enumerate()
-            {
-                let (min, max) = if let Some((min, max)) = *stats {
-                    (min, max)
-                } else {
-                    let (min, max) = candidates.iter().copied().fold(
-                        (
-                            <Lab>::new(f32::MAX, f32::MAX, f32::MAX),
-                            <Lab>::new(f32::MIN, f32::MIN, f32::MIN),
-                        ),
-                        |(min, max), color| {
+            let (best_bucket, max_idx, _) = buckets
+                .par_iter()
+                .zip(bucket_stats.par_iter_mut())
+                .enumerate()
+                .map(|(idx, (candidates, stats))| {
+                    let (min, max) = if let Some((min, max)) = *stats {
+                        (min, max)
+                    } else {
+                        let (min, max) = candidates.iter().copied().fold(
                             (
                                 Lab::new(
                                     min.l.min(color.l),
@@ -54,23 +54,14 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for MedianCutPaletteBuilder<PALET
                     (min, max)
                 };
 
-                let range = [
-                    (max.l - min.l) / (<Lab>::max_l() - <Lab>::min_l()),
-                    (max.a - min.a) / (<Lab>::max_a() - <Lab>::min_a()),
-                    (max.b - min.b) / (<Lab>::max_b() - <Lab>::min_b()),
-                ];
-                let max_range_idx = range
-                    .iter()
-                    .enumerate()
-                    .max_by_key(|(_, diff)| NotNan::new(**diff).unwrap())
-                    .map(|(idx, _)| idx)
-                    .unwrap();
-                if range[max_range_idx] > max_range {
-                    best_bucket = idx;
-                    max_idx = max_range_idx;
-                    max_range = range[max_range_idx];
-                }
-            }
+                    (idx, max_range_idx, range[max_range_idx])
+                })
+                .reduce(
+                    || (0, 0, 0.0),
+                    |a, b| {
+                        if a.2 > b.2 { a } else { b }
+                    },
+                );
 
             let candidates = &mut buckets[best_bucket];
             candidates.sort_by(|a, b| match max_idx {
