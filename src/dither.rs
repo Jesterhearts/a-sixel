@@ -1,10 +1,14 @@
+use dilate::DilateExpand;
 use image::RgbImage;
 use kiddo::float::kdtree::KdTree;
 use palette::Lab;
-use rayon::iter::{
-    IndexedParallelIterator,
-    IntoParallelIterator,
-    ParallelIterator,
+use rayon::{
+    iter::{
+        IndexedParallelIterator,
+        IntoParallelIterator,
+        ParallelIterator,
+    },
+    slice::ParallelSliceMut,
 };
 
 use crate::{
@@ -23,7 +27,7 @@ pub trait Dither: private::Sealed {
     fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
         let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
 
-        let mut palette = KdTree::<_, _, 3, 32, u32>::with_capacity(in_palette.len());
+        let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
 
         for (idx, color) in in_palette.iter().enumerate() {
             palette.add(color.as_ref(), idx);
@@ -265,4 +269,71 @@ impl Dither for Burkes {
         (1, 1, 4.0),
         (2, 1, 2.0),
     ];
+}
+
+/// Perform ordered dithering using the Bayer matrix.
+pub struct Bayer;
+impl private::Sealed for Bayer {}
+impl Dither for Bayer {
+    const DIV: f32 = 0.0;
+    const KERNEL: &[(isize, isize, f32)] = &[];
+
+    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
+        let matrix_size = (1usize << 8)
+            .div_ceil(in_palette.len().div_ceil(3))
+            .next_power_of_two();
+        let r = (in_palette.len().ilog2().div_ceil(3)) as f32;
+        let mut l_matrix = vec![0.0; matrix_size * matrix_size];
+        let mut a_matrix = vec![0.0; matrix_size * matrix_size];
+        let mut b_matrix = vec![0.0; matrix_size * matrix_size];
+
+        (0..matrix_size as u32)
+            .into_par_iter()
+            .zip(l_matrix.par_chunks_mut(matrix_size))
+            .zip(a_matrix.par_chunks_mut(matrix_size))
+            .zip(b_matrix.par_chunks_mut(matrix_size))
+            .for_each(|(((y, row_l), row_a), row_b)| {
+                for (x, ((cell_l, cell_a), cell_b)) in
+                    row_l.iter_mut().zip(row_a).zip(row_b).enumerate()
+                {
+                    let x = x as u32;
+                    let bits = (x ^ y).dilate_expand::<2>().value()
+                        | (y.dilate_expand::<2>().value() << 1);
+                    let bits = bits.reverse_bits() >> bits.leading_zeros();
+                    let partial_thresh = bits as f32 / matrix_size.pow(2) as f32;
+
+                    *cell_l = partial_thresh - 0.5;
+                    *cell_a = partial_thresh - 0.5;
+                    *cell_b = partial_thresh - 0.5;
+                }
+            });
+
+        let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
+        for (idx, color) in in_palette.iter().enumerate() {
+            palette.add(color.as_ref(), idx);
+        }
+
+        let mut result = vec![0; image.width() as usize * image.height() as usize];
+        let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
+
+        pixels
+            .into_par_iter()
+            .enumerate()
+            .zip(&mut result)
+            .for_each(|((idx, p), dest)| {
+                let x = (idx % image.width() as usize) % matrix_size;
+                let y = (idx / image.width() as usize) % matrix_size;
+
+                let m_idx = x + y * matrix_size;
+                let l = p.l + r * l_matrix[m_idx];
+                let a = p.a + r * a_matrix[m_idx];
+                let b = p.b + r * b_matrix[m_idx];
+
+                *dest = palette
+                    .nearest_one::<kiddo::SquaredEuclidean>(&[l, a, b])
+                    .item;
+            });
+
+        result
+    }
 }

@@ -5,7 +5,7 @@ use kiddo::{
     SquaredEuclidean,
     float::kdtree::KdTree,
 };
-use ordered_float::NotNan;
+use ordered_float::OrderedFloat;
 use palette::Lab;
 use rayon::iter::{
     IntoParallelRefIterator,
@@ -126,9 +126,9 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize, const GA
             .into_iter()
             .map(|lab| {
                 [
-                    NotNan::new(lab.l).unwrap(),
-                    NotNan::new(lab.a).unwrap(),
-                    NotNan::new(lab.b).unwrap(),
+                    OrderedFloat(lab.l),
+                    OrderedFloat(lab.a),
+                    OrderedFloat(lab.b),
                 ]
             })
             .collect::<HashSet<_>>()

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use dilate::DilateExpand;
-use ordered_float::NotNan;
+use ordered_float::OrderedFloat;
 use palette::{
     IntoColor,
     Lab,
@@ -88,9 +88,9 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for BitPaletteBuilder<PALETTE_SIZ
                 );
                 let lab: Lab = rgb.into_format().into_color();
                 [
-                    NotNan::new(lab.l).unwrap(),
-                    NotNan::new(lab.a).unwrap(),
-                    NotNan::new(lab.b).unwrap(),
+                    OrderedFloat(lab.l),
+                    OrderedFloat(lab.a),
+                    OrderedFloat(lab.b),
                 ]
             })
             .collect::<HashSet<_>>()

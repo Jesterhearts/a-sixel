@@ -21,7 +21,7 @@ use libblur::{
     ThreadingPolicy,
     stack_blur_f32,
 };
-use ordered_float::NotNan;
+use ordered_float::OrderedFloat;
 use palette::{
     Lab,
     color_difference::EuclideanDistance,
@@ -520,7 +520,7 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteB
             dump_intermediate("candidates", &quant_candidates, image_width, image_height);
         }
 
-        candidates.par_sort_by_key(|(_, w)| NotNan::new(*w).unwrap());
+        candidates.par_sort_by_key(|(_, w)| OrderedFloat(*w));
 
         let mut palette = candidates[candidates.len() - 1..].to_vec();
 
@@ -602,9 +602,9 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteB
             .into_iter()
             .map(|(lab, _)| {
                 [
-                    NotNan::new(lab.l).unwrap(),
-                    NotNan::new(lab.a).unwrap(),
-                    NotNan::new(lab.b).unwrap(),
+                    OrderedFloat(lab.l),
+                    OrderedFloat(lab.a),
+                    OrderedFloat(lab.b),
                 ]
             })
             .collect::<HashSet<_>>()

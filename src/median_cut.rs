@@ -1,5 +1,5 @@
 use image::RgbImage;
-use ordered_float::NotNan;
+use ordered_float::OrderedFloat;
 use palette::Lab;
 use rayon::{
     iter::{
@@ -81,7 +81,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for MedianCutPaletteBuilder<PALET
                     let max_range_idx = range
                         .iter()
                         .enumerate()
-                        .max_by_key(|(_, diff)| NotNan::new(**diff).unwrap())
+                        .max_by_key(|(_, diff)| OrderedFloat(**diff))
                         .map(|(idx, _)| idx)
                         .unwrap();
 
