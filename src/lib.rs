@@ -2,6 +2,7 @@ mod adu;
 pub mod dither;
 mod focal;
 mod median_cut;
+mod octree;
 
 use std::fmt::Write;
 
@@ -15,6 +16,13 @@ use palette::{
     Lab,
     encoding::Srgb,
 };
+use rayon::{
+    iter::{
+        IndexedParallelIterator,
+        ParallelIterator,
+    },
+    slice::ParallelSlice,
+};
 
 use crate::dither::{
     Dither,
@@ -24,6 +32,7 @@ pub use crate::{
     adu::ADUPaletteBuilder,
     focal::FocalPaletteBuilder,
     median_cut::MedianCutPaletteBuilder,
+    octree::OctreePaletteBuilder,
 };
 
 struct SixelRow<'c> {
@@ -148,6 +157,16 @@ pub type MedianCutSixelEncoder128<D = Sierra> = SixelEncoder<MedianCutPaletteBui
 pub type MedianCutSixelEncoder256<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<256>, D>;
 pub type MedianCutSixelEncoder<D = Sierra> = MedianCutSixelEncoder256<D>;
 
+pub type OctreeSixelEncoderMono<D = Sierra> = SixelEncoder<OctreePaletteBuilder<2>, D>;
+pub type OctreeSixelEncoder4<D = Sierra> = SixelEncoder<OctreePaletteBuilder<4>, D>;
+pub type OctreeSixelEncoder8<D = Sierra> = SixelEncoder<OctreePaletteBuilder<8>, D>;
+pub type OctreeSixelEncoder16<D = Sierra> = SixelEncoder<OctreePaletteBuilder<16>, D>;
+pub type OctreeSixelEncoder32<D = Sierra> = SixelEncoder<OctreePaletteBuilder<32>, D>;
+pub type OctreeSixelEncoder64<D = Sierra> = SixelEncoder<OctreePaletteBuilder<64>, D>;
+pub type OctreeSixelEncoder128<D = Sierra> = SixelEncoder<OctreePaletteBuilder<128>, D>;
+pub type OctreeSixelEncoder256<D = Sierra> = SixelEncoder<OctreePaletteBuilder<256>, D>;
+pub type OctreeSixelEncoder<D = Sierra> = OctreeSixelEncoder256<D>;
+
 impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
     pub fn encode(image: RgbImage) -> String {
         let palette = P::build_palette(&image);
@@ -177,38 +196,45 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
             .chunks(image.width() as usize)
             .collect::<Vec<_>>();
 
-        let mut row_palette = vec![false; P::PALETTE_SIZE];
-        for stack in rows.chunks(6) {
-            row_palette.fill(false);
-            for idx in stack_iter(stack).flat_map(|(((((zero, one), two), three), four), five)| {
-                std::iter::once(zero)
-                    .chain(one)
-                    .chain(two)
-                    .chain(three)
-                    .chain(four)
-                    .chain(five)
-            }) {
-                row_palette[idx] = true;
-            }
-
-            for (color, _) in row_palette.iter().copied().enumerate().filter(|(_, v)| *v) {
-                let mut stack_string = SixelRow::new(&mut sixel_string, color);
-                for (((((zero, one), two), three), four), five) in stack_iter(stack) {
-                    let bits = (zero == color) as u8
-                        | ((one == Some(color)) as u8) << 1
-                        | ((two == Some(color)) as u8) << 2
-                        | ((three == Some(color)) as u8) << 3
-                        | ((four == Some(color)) as u8) << 4
-                        | ((five == Some(color)) as u8) << 5;
-                    let char = num2six(bits);
-                    stack_string.push(char);
+        let mut strings = vec![String::new(); rows.len().div_ceil(6)];
+        rows.par_chunks(6)
+            .zip(&mut strings)
+            .for_each(|(stack, sixel_string)| {
+                let mut row_palette = vec![false; P::PALETTE_SIZE];
+                row_palette.fill(false);
+                for idx in
+                    stack_iter(stack).flat_map(|(((((zero, one), two), three), four), five)| {
+                        std::iter::once(zero)
+                            .chain(one)
+                            .chain(two)
+                            .chain(three)
+                            .chain(four)
+                            .chain(five)
+                    })
+                {
+                    row_palette[idx] = true;
                 }
-                stack_string.finalize();
-            }
-            sixel_string.push('-');
-        }
 
+                for (color, _) in row_palette.iter().copied().enumerate().filter(|(_, v)| *v) {
+                    let mut stack_string = SixelRow::new(sixel_string, color);
+                    for (((((zero, one), two), three), four), five) in stack_iter(stack) {
+                        let bits = (zero == color) as u8
+                            | ((one == Some(color)) as u8) << 1
+                            | ((two == Some(color)) as u8) << 2
+                            | ((three == Some(color)) as u8) << 3
+                            | ((four == Some(color)) as u8) << 4
+                            | ((five == Some(color)) as u8) << 5;
+                        let char = num2six(bits);
+                        stack_string.push(char);
+                    }
+                    stack_string.finalize();
+                }
+                sixel_string.push('-');
+            });
+
+        sixel_string.extend(strings);
         sixel_string.push_str(r#"\"#);
+
         sixel_string
     }
 }

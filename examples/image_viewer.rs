@@ -25,6 +25,15 @@ use a_sixel::{
     MedianCutSixelEncoder128,
     MedianCutSixelEncoder256,
     MedianCutSixelEncoderMono,
+    OctreeSixelEncoder4,
+    OctreeSixelEncoder8,
+    OctreeSixelEncoder16,
+    OctreeSixelEncoder32,
+    OctreeSixelEncoder64,
+    OctreeSixelEncoder128,
+    OctreeSixelEncoder256,
+    OctreeSixelEncoderMono,
+    dither::NoDither,
 };
 use clap::Parser;
 use strum::{
@@ -38,6 +47,7 @@ enum PaletteFormat {
     Adu,
     Focal,
     MedianCut,
+    Octree,
 }
 
 #[derive(Debug, Parser)]
@@ -93,6 +103,17 @@ fn main() -> anyhow::Result<()> {
             48..86 => <MedianCutSixelEncoder64>::encode(image),
             86..192 => <MedianCutSixelEncoder128>::encode(image),
             _ => <MedianCutSixelEncoder256>::encode(image),
+        },
+        PaletteFormat::Octree => match args.palette_size {
+            0 => <OctreeSixelEncoder256<NoDither>>::encode(image),
+            1..3 => <OctreeSixelEncoderMono>::encode(image),
+            3..6 => <OctreeSixelEncoder4>::encode(image),
+            6..12 => <OctreeSixelEncoder8>::encode(image),
+            12..24 => <OctreeSixelEncoder16>::encode(image),
+            24..48 => <OctreeSixelEncoder32>::encode(image),
+            48..86 => <OctreeSixelEncoder64>::encode(image),
+            86..192 => <OctreeSixelEncoder128>::encode(image),
+            _ => <OctreeSixelEncoder256>::encode(image),
         },
     };
 
