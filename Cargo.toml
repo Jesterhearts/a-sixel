@@ -1,0 +1,31 @@
+[package]
+name    = "a-sixel"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = [  ]
+# For debugging -- maps the saliency scores used to determine color weights to a greyscale image and dumps each map to a file.
+dump_saliency       = [ "dump_l_saliency", "dump_a_saliency", "dump_b_saliency", "dump_dist_saliency", "dump_local_saliency", "dump_weights" ]
+dump_l_saliency     = [  ]
+dump_a_saliency     = [  ]
+dump_b_saliency     = [  ]
+dump_dist_saliency  = [  ]
+dump_local_saliency = [  ]
+dump_weights        = [  ]
+
+[dependencies]
+image         = { version = "0.25.6", default-features = false }
+kiddo         = "5.0.3"
+libblur       = "0.18.0"
+ordered-float = "5.0.0"
+palette       = { version = "0.7.6", default-features = false, features = [ "std" ] }
+rayon         = "1.10.0"
+rustfft       = "6.3.0"
+sobol_burley  = "0.5.0"
+
+[dev-dependencies]
+anyhow = "1.0.98"
+clap   = { version = "4.5.38", features = [ "derive" ] }
+image  = "0.25.6"
+strum  = { version = "0.27.1", features = [ "derive" ] }
