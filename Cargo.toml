@@ -7,6 +7,7 @@ description = "A library for encoding images into the Sixel graphics format, off
 keywords    = [ "sixel", "terminal", "encoding", "quantization", "dithering" ]
 readme      = "README.md"
 repository  = "https://github.com/Jesterhearts/a-sixel"
+exclude     = [ "test_images" ]
 
 [features]
 default = [  ]
