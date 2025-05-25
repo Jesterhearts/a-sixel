@@ -1,3 +1,52 @@
+//! A-Sixel library for encoding sixel images.
+//!
+//! ### Basic Usage
+//!
+//! ```rust
+//! use a_sixel::ADUSixelEncoder;
+//! use image::RgbImage;
+//!
+//! let img = RgbImage::new(100, 100);
+//! println!("{}", <ADUSixelEncoder>::encode(&img));
+//! ```
+//!
+//! ## Choosing an Encoder
+//! - I want fast encoding with good quality:
+//!   - Use [`ADUSixelEncoder`]
+//!   - [`BitSixelEncoder`] can also produce pretty good results for 256 colors
+//!     depending on the image while being over 10x faster.
+//! - I'm time constrained:
+//!   - Use [`ADUSixelEncoder`] or [`BitSixelEncoder`]. You can customize `ADU`
+//!     by lowering the `STEPS` parameter to run faster if necessary while still
+//!     getting good results.
+//! - I'm _really_ time constrained and can sacrifice a little quality:
+//!   - Use [`BitSixelEncoder<NoDither>`].
+//! - I want high quality encoding, and don't mind a bit more computation:
+//!   - Use [`FocalSixelEncoder`].
+//!   - This matters a lot less if you're not crunching the palette down below
+//!     256 colors.
+//!   - Note that this an experimental encoder. It will *likely* produce better
+//!     results than just [`ADUSixelEncoder`], but it may not always do so. On
+//!     the test images, for my personal preferences, I think it's slightly
+//!     better - particularly at small palette sizes.
+//!
+//!     <details>
+//!     <summary>How it works</summary>
+//!
+//!     Under the hood, it is a modified version of the `ADUSixelEncoder`
+//!     that uses a weighted selection algorithm for its sample pixels. These
+//!     weights are determined based on saliency maps and measures of
+//!     statistical noise in the image.
+//!
+//!     In addition to the weighted selection, the distance metric used to
+//!     determine which cluster to place a pixel into also incorporates the
+//!     weight. Similar pixels with different weights will be nudged towards
+//!     clusters with similar weights. This is a mild effect, but it seems
+//!     to improve things over basic clustering when there are a lot of similar
+//!     colors in an image.
+//!
+//!     </details>
+
 mod adu;
 mod bit;
 pub mod dither;
@@ -11,10 +60,10 @@ use image::{
     RgbImage,
 };
 use palette::{
+    encoding::Srgb,
     Hsl,
     IntoColor,
     Lab,
-    encoding::Srgb,
 };
 use rayon::{
     iter::{
@@ -96,15 +145,17 @@ const fn num2six(num: u8) -> char {
     (0x3f + num) as char
 }
 
-/// The main type for performing sixel encoding. It is provided with two generic
-/// parameters:
+/// The main type for performing sixel encoding.
+///
+/// It is provided with two generic parameters:
 /// - A [`PaletteBuilder`] to generate a color palette from the input image
 ///   (sixel only supports up to 256 colors).
 /// - A [`Dither`] type to apply dithering to the reduced color image before
 ///   encoding it into sixel format.
 ///
 /// A number of type aliases are provided for common configurations, such as
-/// `ADUSixelEncoder256`, which uses the [`ADUPaletteBuilder`] with 256 colors.
+/// [`ADUSixelEncoder256`], which uses the [`ADUPaletteBuilder`] with 256
+/// colors.
 ///
 /// # Choosing a `PaletteBuilder`
 /// - [`ADUPaletteBuilder`] is a good default choice for minimizing the error
@@ -118,8 +169,8 @@ const fn num2six(num: u8) -> char {
 ///   at image accuracy than either of these two.
 ///
 /// # Choosing a `Dither`
-/// - [`Sierra`](dither::Sierra) is a good default choice for dithering, as it
-///   produces high-quality results with minimal artifacts.
+/// - [`Sierra`] is a good default choice for dithering, as it produces
+///   high-quality results with minimal artifacts.
 /// - [`NoDither`](dither::NoDither) can be used if performance is a concern.
 pub struct SixelEncoder<P: PaletteBuilder = FocalPaletteBuilder, D: Dither = Sierra> {
     _p: std::marker::PhantomData<P>,
@@ -178,7 +229,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
 
         for (i, lab) in palette.iter().copied().enumerate() {
             let hsl: Hsl = lab.into_color();
-            // This may be a windows specific bug, but hue is offset by 120 degrees.
+            // Sixel hue is offset by 120 degrees from the common hue values.
             let deg = (hsl.hue.into_positive_degrees().round() as u16 + 120) % 360;
 
             sixel_string
@@ -247,7 +298,7 @@ type StackTuple = (
     Option<usize>,
 );
 
-fn stack_iter(stack: &[&[usize]]) -> impl Iterator<Item = StackTuple> {
+fn stack_iter<'a>(stack: &'a [&[usize]]) -> impl Iterator<Item = StackTuple> + 'a {
     stack
         .first()
         .into_iter()

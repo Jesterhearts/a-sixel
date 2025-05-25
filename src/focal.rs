@@ -15,16 +15,16 @@ use kiddo::{
     traits::DistanceMetric,
 };
 use libblur::{
+    stack_blur_f32,
     AnisotropicRadius,
     BlurImageMut,
     FastBlurChannels,
     ThreadingPolicy,
-    stack_blur_f32,
 };
 use ordered_float::OrderedFloat;
 use palette::{
-    Lab,
     color_difference::EuclideanDistance,
+    Lab,
 };
 use rayon::{
     iter::{
@@ -40,20 +40,22 @@ use rayon::{
     },
 };
 use rustfft::{
-    FftPlanner,
     num_complex::Complex,
     num_traits::Zero,
+    FftPlanner,
 };
 use sobol_burley::sample_4d;
 
 use crate::{
-    PaletteBuilder,
     private,
     rgb_to_lab,
+    PaletteBuilder,
 };
 
 /// Use weighted pixels based on the image's spectral properties to select input
-/// to ADU. Pixels are additionally given a small "push" towards clusters that
+/// to ADU.
+///
+/// Pixels are additionally given a small "push" towards clusters that
 /// have similar weights during clustering. These factors combine to help
 /// extract small highlights and other details that e.g. pure ADU might miss.
 ///

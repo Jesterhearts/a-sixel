@@ -281,7 +281,6 @@ impl Dither for Burkes {
     ];
 }
 
-/// Perform ordered dithering using the Bayer matrix.
 pub struct Bayer;
 impl private::Sealed for Bayer {}
 impl Dither for Bayer {

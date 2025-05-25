@@ -12,12 +12,12 @@ use rayon::{
 };
 
 use crate::{
-    PaletteBuilder,
     private,
     rgb_to_lab,
+    PaletteBuilder,
 };
 
-/// https://en.wikipedia.org/wiki/Median_cut
+/// <https://en.wikipedia.org/wiki/Median_cut>
 ///
 /// Does a simple median cut over the input pixels.
 /// - Find the bucket of pixels with the largest range on one of the three axes
@@ -90,7 +90,11 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for MedianCutPaletteBuilder<PALET
                 .reduce(
                     || (0, 0, 0.0),
                     |a, b| {
-                        if a.2 > b.2 { a } else { b }
+                        if a.2 > b.2 {
+                            a
+                        } else {
+                            b
+                        }
                     },
                 );
 
