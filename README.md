@@ -21,7 +21,7 @@
     <summary>How it works</summary>
 
     Under the hood, it is a modified version of the `ADUSixelEncoder` that uses a weighted selection
-    algorithm for its sample pixels. These weights are determened based on saliency maps and
+    algorithm for its sample pixels. These weights are determined based on saliency maps and
     measures of statistical noise in the image.
 
     In addition to the weighted selection, the distance metric used to determine which cluster to
