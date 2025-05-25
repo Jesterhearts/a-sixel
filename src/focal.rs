@@ -52,6 +52,33 @@ use crate::{
     rgb_to_lab,
 };
 
+/// Use weighted pixels based on the image's spectral properties to select input
+/// to ADU. Pixels are additionally given a small "push" towards clusters that
+/// have similar weights during clustering. These factors combine to help
+/// extract small highlights and other details that e.g. pure ADU might miss.
+///
+/// Weights are computed using the following steps:
+/// 1. Compute the saliency maps for each channel (L, a, b) using a combination
+///    of the following:
+///    - Spectral residual is the difference between the blurred natural log of
+///      the amplitude calculated by the FFT and the natural log of the
+///      amplitude reconstructed from the inverse FFT using the original phase
+///      spectrum.
+///    - Modulated spectral residual is the same as the above, but the amplitude
+///      and phase have flattened mid values.
+///    - Phase spectrum is the phase of the FFT.
+///    - Amplitude spectrum is the amplitude of the FFT modulated to have a
+///      flattened midrange.
+/// 2. Compute the average distance of each pixel to the centroid of the image
+///    transformed to the range \[0, 1].
+/// 3. Compute the average local distance of each pixel to its neighbors within
+///    a window of size ln(pixels.len()) / 2. This is used to help identify
+///    edges and features in the image.
+/// 4. Compute the final weight for each pixel as a combination of the saliency
+///    maps and the local distance: lerp(sr.max(mod_sr), p, a, ld) where sr is
+///    the spectral residual, mod_sr is the modulated spectral residual, p is
+///    the phase spectrum, a is the amplitude spectrum, and ld is the local
+///    distance.
 pub struct FocalPaletteBuilder<
     const PALETTE_SIZE: usize = 256,
     const THETA: usize = 2,
