@@ -5,11 +5,11 @@ A-Sixel library for encoding sixel images.
 #### Basic Usage
 
 ```rust
-use a_sixel::ADUSixelEncoder;
+use a_sixel::KMeansSixelEncoder;
 use image::RgbImage;
 
 let img = RgbImage::new(100, 100);
-println!("{}", <ADUSixelEncoder>::encode(&img));
+println!("{}", <KMeansSixelEncoder>::encode(&img));
 ```
 
 ### Choosing an Encoder

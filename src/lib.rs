@@ -3,33 +3,33 @@
 //! ### Basic Usage
 //!
 //! ```rust
-//! use a_sixel::ADUSixelEncoder;
+//! use a_sixel::KMeansSixelEncoder;
 //! use image::RgbImage;
 //!
 //! let img = RgbImage::new(100, 100);
-//! println!("{}", <ADUSixelEncoder>::encode(&img));
+//! println!("{}", <KMeansSixelEncoder>::encode(&img));
 //! ```
 //!
 //! ## Choosing an Encoder
 //! - I want fast encoding with good quality:
-//!   - Use [`ADUSixelEncoder`]
+//!   - Use `KMeansSixelEncoder` or `ADUSixelEncoder`.
 //! - I'm time constrained:
-//!   - Use [`ADUSixelEncoder`], [`OctreeSixelEncoder`], or [`BitSixelEncoder`].
-//!     You can customize `ADU` by lowering the `STEPS` parameter to run faster
-//!     if necessary while still getting good results.
+//!   - Use `ADUSixelEncoder`, `BitSixelEncoder`, or `OctreeSixelEncoder`. You
+//!     can customize `ADU` by lowering the `STEPS` parameter to run faster if
+//!     necessary while still getting good results.
 //! - I'm _really_ time constrained and can sacrifice a little quality:
-//!   - Use [`BitSixelEncoder<NoDither>`].
+//!   - Use `BitSixelEncoder<NoDither>`.
 //! - I want high quality encoding, and don't mind a bit more computation:
-//!   - Use [`FocalSixelEncoder`].
+//!   - Use `FocalSixelEncoder`.
 //!   - This matters a lot less if you're not crunching the palette down below
 //!     256 colors.
-//!   - Note that this an experimental encoder. It will *likely* produce
-//!     comparable or better results than other encoders, but it may not always
-//!     do so. On the test images, for my personal preferences, I think it's
+//!   - Note that this an experimental encoder. It will *likely* produce better
+//!     comparable or better results than other encoders, but may not always do
+//!     so. On the test images, for my personal preferences, I think it's
 //!     slightly better - particularly at small palette sizes. It works by
-//!     computing saliancy maps for the image and using these to compute scores
-//!     for each pixel. These weighted pixels are then fed into a weighted
-//!     k-means to produce the final palette.
+//!     computing weights for each pixel based on saliancy maps and measures of
+//!     local statistics. These weighted pixels are then fed into a weighted
+//!     k-means algorithm to produce a palette.
 
 mod adu;
 mod bit;
@@ -240,8 +240,8 @@ pub type KMeansSixelEncoder256<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<2
 pub type KMeansSixelEncoder<D = Sierra> = KMeansSixelEncoder256<D>;
 
 impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
-    pub fn encode(image: RgbImage) -> String {
-        let palette = P::build_palette(&image);
+    pub fn encode(image: &RgbImage) -> String {
+        let palette = P::build_palette(image);
 
         let mut sixel_string = r#"Pq"1;1;"#.to_string();
         sixel_string
@@ -262,7 +262,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                 .expect("Failed to palette entry");
         }
 
-        let paletted_pixels = D::dither_and_palettize(&image, &palette, P::PALETTE_SIZE);
+        let paletted_pixels = D::dither_and_palettize(image, &palette, P::PALETTE_SIZE);
 
         let rows: Vec<&[usize]> = paletted_pixels
             .chunks(image.width() as usize)
