@@ -72,7 +72,7 @@ pub struct OctreePaletteBuilder<const PALETTE_SIZE: usize, const USE_MIN_HEAP: b
 impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool>
     OctreePaletteBuilder<PALETTE_SIZE, USE_MIN_HEAP>
 {
-    pub fn insert(&mut self, color: Srgb<u8>) {
+    fn insert(&mut self, color: Srgb<u8>) {
         // Indexing uses the bottom bits first, so we put the most significant part of
         // the color in those bits. Using the order for luminance leads to blue
         // green red order.

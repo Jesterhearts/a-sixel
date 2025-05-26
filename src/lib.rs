@@ -239,9 +239,7 @@ pub type OctreeSixelEncoder<D = Sierra, const USE_MIN_HEAP: bool = false> =
 
 impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
     pub fn encode(image: RgbImage) -> String {
-        let timer = std::time::Instant::now();
         let palette = P::build_palette(&image);
-        println!("Palette built in {}ms", timer.elapsed().as_millis());
 
         let mut sixel_string = r#"Pq"1;1;"#.to_string();
         sixel_string
