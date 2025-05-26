@@ -72,6 +72,18 @@ pub struct OctreePaletteBuilder<const PALETTE_SIZE: usize, const USE_MIN_HEAP: b
 impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool>
     OctreePaletteBuilder<PALETTE_SIZE, USE_MIN_HEAP>
 {
+    fn new() -> Self {
+        OctreePaletteBuilder {
+            nodes: vec![Node {
+                children: [None; 8],
+                rgb: (0, 0, 0),
+                count: 0,
+                parent: usize::MAX,
+                depth: 0,
+            }],
+        }
+    }
+
     fn insert(&mut self, color: Srgb<u8>) {
         // Indexing uses the bottom bits first, so we put the most significant part of
         // the color in those bits. Using the order for luminance leads to blue
@@ -108,22 +120,6 @@ impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool>
     }
 }
 
-impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool> Default
-    for OctreePaletteBuilder<PALETTE_SIZE, USE_MIN_HEAP>
-{
-    fn default() -> Self {
-        OctreePaletteBuilder {
-            nodes: vec![Node {
-                children: [None; 8],
-                rgb: (0, 0, 0),
-                count: 0,
-                parent: usize::MAX,
-                depth: 0,
-            }],
-        }
-    }
-}
-
 impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool> private::Sealed
     for OctreePaletteBuilder<PALETTE_SIZE, USE_MIN_HEAP>
 {
@@ -134,7 +130,7 @@ impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool> PaletteBuilder
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     fn build_palette(image: &image::RgbImage) -> Vec<palette::Lab> {
-        let mut octree = OctreePaletteBuilder::<PALETTE_SIZE>::default();
+        let mut octree = OctreePaletteBuilder::<PALETTE_SIZE>::new();
 
         for pixel in image.pixels() {
             octree.insert(Srgb::<u8>::new(pixel[0], pixel[1], pixel[2]));
