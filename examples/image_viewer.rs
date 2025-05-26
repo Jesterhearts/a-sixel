@@ -6,8 +6,10 @@ use a_sixel::{
         ADUSixelEncoder16,
         ADUSixelEncoder256,
         ADUSixelEncoder32,
+        ADUSixelEncoder4,
         ADUSixelEncoder64,
         ADUSixelEncoder8,
+        ADUSixelEncoderMono,
     },
     bit::{
         BitSixelEncoder128,
@@ -112,7 +114,21 @@ fn main() -> anyhow::Result<()> {
 
     let six = match args.palette_format {
         PaletteFormat::Adu => match args.palette_size {
-            0..12 => {
+            0..3 => {
+                if args.sobol {
+                    <ADUSixelEncoderMono<Sobol>>::encode(&image)
+                } else {
+                    <ADUSixelEncoderMono>::encode(&image)
+                }
+            }
+            3..6 => {
+                if args.sobol {
+                    <ADUSixelEncoder4<Sobol>>::encode(&image)
+                } else {
+                    <ADUSixelEncoder4>::encode(&image)
+                }
+            }
+            6..12 => {
                 if args.sobol {
                     <ADUSixelEncoder8<Sobol>>::encode(&image)
                 } else {
