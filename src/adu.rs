@@ -2,10 +2,7 @@
 //! select palette entries.
 //!
 //! See <httpe://faculty.uca.edu/ecelebi/documents/ISJ_2014.pdf> for the
-//! original paper on this algorithm. This does slightly different parameters
-//! than the paper, but the algorithm is the same core idea and these parameters
-//! work well enough. See the code for the type aliases (e.g.
-//! [`ADUSixelEncoder`](crate::ADUSixelEncoder)) for more default parameters.
+//! original paper on this algorithm.
 //!
 //! The parameters from the paper for a 256 color palette are:
 //! - THETA = (400 * 256^0.5) = 6400
@@ -13,6 +10,9 @@
 //! - GAMMA = 0.015 or GAMMA_DIV ~= 64
 //!
 //! as is specified by the default arguments to this struct.
+//!
+//! See the code for the type aliases (e.g.
+//! [`ADUSixelEncoder`](crate::ADUSixelEncoder)) for more default parameters.
 
 use std::collections::HashSet;
 
