@@ -43,7 +43,6 @@ pub type ADUSixelEncoder32<D = Sierra> = SixelEncoder<ADUPaletteBuilder<32>, D>;
 pub type ADUSixelEncoder64<D = Sierra> = SixelEncoder<ADUPaletteBuilder<64>, D>;
 pub type ADUSixelEncoder128<D = Sierra> = SixelEncoder<ADUPaletteBuilder<128>, D>;
 pub type ADUSixelEncoder256<D = Sierra> = SixelEncoder<ADUPaletteBuilder<256>, D>;
-pub type ADUSixelEncoder256High<D = Sierra> = SixelEncoder<ADUPaletteBuilder, D>;
 
 pub struct ADUPaletteBuilder<
     const PALETTE_SIZE: usize = 256,

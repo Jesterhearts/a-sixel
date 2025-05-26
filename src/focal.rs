@@ -77,23 +77,12 @@ pub type FocalSixelEncoder32<D = Sierra> = SixelEncoder<FocalPaletteBuilder<32>,
 pub type FocalSixelEncoder64<D = Sierra> = SixelEncoder<FocalPaletteBuilder<64>, D>;
 pub type FocalSixelEncoder128<D = Sierra> = SixelEncoder<FocalPaletteBuilder<128>, D>;
 pub type FocalSixelEncoder256<D = Sierra> = SixelEncoder<FocalPaletteBuilder<256>, D>;
-pub type FocalSixelEncoder256High<D = Sierra> =
-    SixelEncoder<FocalPaletteBuilder<256, { 1 << 12 }, { 1 << 22 }>, D>;
 
-pub struct FocalPaletteBuilder<
-    const PALETTE_SIZE: usize = 256,
-    const THETA: usize = 2,
-    const STEPS: usize = 131072,
->;
+pub struct FocalPaletteBuilder<const PALETTE_SIZE: usize = 256>;
 
-impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> private::Sealed
-    for FocalPaletteBuilder<PALETTE_SIZE, THETA, STEPS>
-{
-}
+impl<const PALETTE_SIZE: usize> private::Sealed for FocalPaletteBuilder<PALETTE_SIZE> {}
 
-impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteBuilder
-    for FocalPaletteBuilder<PALETTE_SIZE, THETA, STEPS>
-{
+impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_SIZE> {
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     #[inline(never)]

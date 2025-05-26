@@ -5,7 +5,6 @@ use a_sixel::{
         ADUSixelEncoder128,
         ADUSixelEncoder16,
         ADUSixelEncoder256,
-        ADUSixelEncoder256High,
         ADUSixelEncoder32,
         ADUSixelEncoder64,
         ADUSixelEncoder8,
@@ -29,7 +28,6 @@ use a_sixel::{
         FocalSixelEncoder128,
         FocalSixelEncoder16,
         FocalSixelEncoder256,
-        FocalSixelEncoder256High,
         FocalSixelEncoder32,
         FocalSixelEncoder4,
         FocalSixelEncoder64,
@@ -149,18 +147,11 @@ fn main() -> anyhow::Result<()> {
                     <ADUSixelEncoder128>::encode(&image)
                 }
             }
-            192..=256 => {
+            _ => {
                 if args.sobol {
                     <ADUSixelEncoder256<Sobol>>::encode(&image)
                 } else {
                     <ADUSixelEncoder256>::encode(&image)
-                }
-            }
-            _ => {
-                if args.sobol {
-                    <ADUSixelEncoder256High<Sobol>>::encode(&image)
-                } else {
-                    <ADUSixelEncoder256High>::encode(&image)
                 }
             }
         },
@@ -214,18 +205,11 @@ fn main() -> anyhow::Result<()> {
                     <FocalSixelEncoder128>::encode(&image)
                 }
             }
-            192..=256 => {
+            _ => {
                 if args.sobol {
                     <FocalSixelEncoder256<Sobol>>::encode(&image)
                 } else {
                     <FocalSixelEncoder256>::encode(&image)
-                }
-            }
-            _ => {
-                if args.sobol {
-                    <FocalSixelEncoder256High<Sobol>>::encode(&image)
-                } else {
-                    <FocalSixelEncoder256High>::encode(&image)
                 }
             }
         },
