@@ -158,15 +158,13 @@ const fn num2six(num: u8) -> char {
 /// colors.
 ///
 /// # Choosing a `PaletteBuilder`
-/// - [`ADUPaletteBuilder`] is a good default choice for minimizing the error
-///   across the image. For maximum color accuracy at the cost of speed, you can
-///   use [`ADUSixelEncoder256High`].
+/// - [`ADUPaletteBuilder`] or [`KMeansPaletteBuilder`] are a good default
+///   choices for minimizing the error across the image.
 /// - [`FocalPaletteBuilder`] is a good choice if the image has highlights and
 ///   other color details that ADU might squash, but is experimental and much
-///   slower. You can increase the number of steps to improve accuracy even
-///   futher, as is done by [`FocalSixelEncoder256High`].
+///   slower.
 /// - Other palette builders are available, but are likely to perform less well
-///   at image accuracy than either of these two.
+///   at image accuracy than these choices.
 ///
 /// # Choosing a `Dither`
 /// - [`Sierra`] is a good default choice for dithering, as it produces
