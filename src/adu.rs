@@ -12,9 +12,7 @@
 //! - STEPS = (2 * 256 - 3) * THETA = 3257600
 //! - GAMMA = 0.015 or GAMMA_DIV ~= 64
 //!
-//! as is specified by the default arguments to this struct. The type aliases
-//! use signficantly lower values because they are much (up to 10x) faster while
-//! still having pretty good results.
+//! as is specified by the default arguments to this struct.
 
 use std::collections::HashSet;
 
