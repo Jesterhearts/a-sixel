@@ -1,3 +1,11 @@
+//! A collection of various dithering algorithms that can be used with the
+//! [`SixelEncoder`](crate::SixelEncoder) to dither the result.
+//!
+//! Most of the dithering algorithms are based on the ones described in
+//! [this article](https://tannerhelland.com/2012/12/28/dithering-eleven-algorithms-source-code.html).
+//! There is also an implementation of the Bayer matrix dithering algorithm
+//! and a Sobol sequence based dithering algorithm.
+
 use dilate::DilateExpand;
 use image::RgbImage;
 use kiddo::float::kdtree::KdTree;
@@ -19,11 +27,6 @@ use crate::{
 
 /// Each struct in this module implements this trait and can be combined with
 /// the [`SixelEncoder`](crate::SixelEncoder) struct to dither the result.
-///
-/// Most of the dithering algorithms are based on the ones described in
-/// [this article](https://tannerhelland.com/2012/12/28/dithering-eleven-algorithms-source-code.html).
-/// There is also an implementation of the Bayer matrix dithering algorithm
-/// and a Sobol sequence based dithering algorithm.
 pub trait Dither: private::Sealed {
     const KERNEL: &[(isize, isize, f32)];
     const DIV: f32;
