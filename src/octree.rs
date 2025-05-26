@@ -1,3 +1,16 @@
+//! Uses an octree to build a palette from an image.
+//!
+//! This is fast (although not as fast as the
+//! [`BitPaletteBuilder`](crate::BitPaletteBuilder)) and produces decent
+//! results. By default the currently implemented algorithm uses a max-heap for
+//! merging nodes by pixel count, leading to the palette being built from the
+//! most dominant colors in the image first, with less dominate colors being
+//! folded in later. This seems to produce a more visually appealing palette
+//! than a min-heap on the test images, although it is counterintuitive.
+//!
+//! You can reverse this behavior by setting the `USE_MIN_HEAP` type parameter
+//! to `true`, which will use a min-heap instead.
+
 use std::collections::{
     BinaryHeap,
     HashSet,
@@ -17,9 +30,28 @@ use rayon::iter::{
 };
 
 use crate::{
+    dither::Sierra,
     private,
     PaletteBuilder,
+    SixelEncoder,
 };
+
+pub type OctreeSixelEncoderMono<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<2, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder4<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<4, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder8<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<8, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder16<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<16, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder32<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<32, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder64<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<64, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder128<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<128, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder256<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<256, USE_MIN_HEAP>, D>;
 
 #[derive(Debug, Clone, Copy)]
 struct Node {
@@ -52,18 +84,6 @@ impl<const MIN: bool> Ord for Candidate<MIN> {
     }
 }
 
-/// Uses an octree to build a palette from an image.
-///
-/// This is fast (although not as fast as the
-/// [`BitPaletteBuilder`](crate::BitPaletteBuilder)) and produces decent
-/// results. By default the currently implemented algorithm uses a max-heap for
-/// merging nodes by pixel count, leading to the palette being built from the
-/// most dominant colors in the image first, with less dominate colors being
-/// folded in later. This seems to produce a more visually appealing palette
-/// than a min-heap on the test images, although it is counterintuitive.
-///
-/// You can reverse this behavior by setting the `USE_MIN_HEAP` type parameter
-/// to `true`, which will use a min-heap instead.
 #[derive(Debug)]
 pub struct OctreePaletteBuilder<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool = false> {
     nodes: Vec<Node>,

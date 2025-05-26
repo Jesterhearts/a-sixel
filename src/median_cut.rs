@@ -1,3 +1,15 @@
+//! <https://en.wikipedia.org/wiki/Median_cut>
+//!
+//! Does a simple median cut over the input pixels.
+//! - Find the bucket of pixels with the largest range on one of the three axes
+//!   (L, a, b).
+//! - Sort the pixels in that bucket by that axis.
+//! - Split the bucket in half at the median and create a new bucket for the
+//!   second half.
+//! - Repeat until the desired number of buckets is reached.
+//!
+//! The resulting palette is the average color of each bucket.
+
 use image::RgbImage;
 use ordered_float::OrderedFloat;
 use palette::Lab;
@@ -12,22 +24,22 @@ use rayon::{
 };
 
 use crate::{
+    dither::Sierra,
     private,
     rgb_to_lab,
     PaletteBuilder,
+    SixelEncoder,
 };
 
-/// <https://en.wikipedia.org/wiki/Median_cut>
-///
-/// Does a simple median cut over the input pixels.
-/// - Find the bucket of pixels with the largest range on one of the three axes
-///   (L, a, b).
-/// - Sort the pixels in that bucket by that axis.
-/// - Split the bucket in half at the median and create a new bucket for the
-///   second half.
-/// - Repeat until the desired number of buckets is reached.
-///
-/// The resulting palette is the average color of each bucket.
+pub type MedianCutSixelEncoderMono<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<2>, D>;
+pub type MedianCutSixelEncoder4<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<4>, D>;
+pub type MedianCutSixelEncoder8<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<8>, D>;
+pub type MedianCutSixelEncoder16<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<16>, D>;
+pub type MedianCutSixelEncoder32<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<32>, D>;
+pub type MedianCutSixelEncoder64<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<64>, D>;
+pub type MedianCutSixelEncoder128<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<128>, D>;
+pub type MedianCutSixelEncoder256<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<256>, D>;
+
 pub struct MedianCutPaletteBuilder<const PALETTE_SIZE: usize = 256>;
 impl<const PALETTE_SIZE: usize> private::Sealed for MedianCutPaletteBuilder<PALETTE_SIZE> {}
 impl<const PALETTE_SIZE: usize> PaletteBuilder for MedianCutPaletteBuilder<PALETTE_SIZE> {

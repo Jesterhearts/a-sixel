@@ -1,3 +1,29 @@
+//! Use weighted pixels based on the image's spectral properties to provided
+//! weighted input to kmeans.
+//!
+//! Weights are computed using the following steps:
+//! 1. Compute the saliency maps for each channel (L, a, b) using a combination
+//!    of the following:
+//!    - Spectral residual is the difference between the blurred natural log of
+//!      the amplitude calculated by the FFT and the natural log of the
+//!      amplitude reconstructed from the inverse FFT using the original phase
+//!      spectrum.
+//!    - Modulated spectral residual is the same as the above, but the amplitude
+//!      and phase have flattened mid values.
+//!    - Phase spectrum is the phase of the FFT.
+//!    - Amplitude spectrum is the amplitude of the FFT modulated to have a
+//!      flattened midrange.
+//! 2. Compute the average distance of each pixel to the centroid of the image
+//!    transformed to the range \[0, 1].
+//! 3. Compute the average local distance of each pixel to its neighbors within
+//!    a window of size ln(pixels.len()) / 2. This is used to help identify
+//!    edges and features in the image.
+//! 4. Compute the final weight for each pixel as a combination of the saliency
+//!    maps and the local distance: lerp(a, sr.max(mod_sr), p, ld) where sr is
+//!    the spectral residual, mod_sr is the modulated spectral residual, p is
+//!    the phase spectrum, a is the amplitude spectrum, and ld is the local
+//!    distance.
+
 use std::f32::consts::PI;
 
 use image::{
@@ -35,41 +61,25 @@ use rustfft::{
 };
 
 use crate::{
+    dither::Sierra,
     kmeans::parallel_kmeans,
     private,
     rgb_to_lab,
     PaletteBuilder,
+    SixelEncoder,
 };
 
-/// Use weighted pixels based on the image's spectral properties to select input
-/// to ADU.
-///
-/// Pixels are additionally given a small "push" towards clusters that
-/// have similar weights during clustering. These factors combine to help
-/// extract small highlights and other details that e.g. pure ADU might miss.
-///
-/// Weights are computed using the following steps:
-/// 1. Compute the saliency maps for each channel (L, a, b) using a combination
-///    of the following:
-///    - Spectral residual is the difference between the blurred natural log of
-///      the amplitude calculated by the FFT and the natural log of the
-///      amplitude reconstructed from the inverse FFT using the original phase
-///      spectrum.
-///    - Modulated spectral residual is the same as the above, but the amplitude
-///      and phase have flattened mid values.
-///    - Phase spectrum is the phase of the FFT.
-///    - Amplitude spectrum is the amplitude of the FFT modulated to have a
-///      flattened midrange.
-/// 2. Compute the average distance of each pixel to the centroid of the image
-///    transformed to the range \[0, 1].
-/// 3. Compute the average local distance of each pixel to its neighbors within
-///    a window of size ln(pixels.len()) / 2. This is used to help identify
-///    edges and features in the image.
-/// 4. Compute the final weight for each pixel as a combination of the saliency
-///    maps and the local distance: lerp(a, sr.max(mod_sr), p, ld) where sr is
-///    the spectral residual, mod_sr is the modulated spectral residual, p is
-///    the phase spectrum, a is the amplitude spectrum, and ld is the local
-///    distance.
+pub type FocalSixelEncoderMono<D = Sierra> = SixelEncoder<FocalPaletteBuilder<2>, D>;
+pub type FocalSixelEncoder4<D = Sierra> = SixelEncoder<FocalPaletteBuilder<4>, D>;
+pub type FocalSixelEncoder8<D = Sierra> = SixelEncoder<FocalPaletteBuilder<8>, D>;
+pub type FocalSixelEncoder16<D = Sierra> = SixelEncoder<FocalPaletteBuilder<16>, D>;
+pub type FocalSixelEncoder32<D = Sierra> = SixelEncoder<FocalPaletteBuilder<32>, D>;
+pub type FocalSixelEncoder64<D = Sierra> = SixelEncoder<FocalPaletteBuilder<64>, D>;
+pub type FocalSixelEncoder128<D = Sierra> = SixelEncoder<FocalPaletteBuilder<128>, D>;
+pub type FocalSixelEncoder256<D = Sierra> = SixelEncoder<FocalPaletteBuilder<256>, D>;
+pub type FocalSixelEncoder256High<D = Sierra> =
+    SixelEncoder<FocalPaletteBuilder<256, { 1 << 12 }, { 1 << 22 }>, D>;
+
 pub struct FocalPaletteBuilder<
     const PALETTE_SIZE: usize = 256,
     const THETA: usize = 2,

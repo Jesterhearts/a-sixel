@@ -1,3 +1,21 @@
+//! Use Adaptive Distributive Units to "learn" the image's color properties and
+//! select palette entries.
+//!
+//! See <httpe://faculty.uca.edu/ecelebi/documents/ISJ_2014.pdf> for the
+//! original paper on this algorithm. This does slightly different parameters
+//! than the paper, but the algorithm is the same core idea and these parameters
+//! work well enough. See the code for the type aliases (e.g.
+//! [`ADUSixelEncoder`](crate::ADUSixelEncoder)) for more default parameters.
+//!
+//! The parameters from the paper for a 256 color palette are:
+//! - THETA = (400 * 256^0.5) = 6400
+//! - STEPS = (2 * 256 - 3) * THETA = 3257600
+//! - GAMMA = 0.015 or GAMMA_DIV ~= 64
+//!
+//! as is specified by the default arguments to this struct. The type aliases
+//! use signficantly lower values because they are much (up to 10x) faster while
+//! still having pretty good results.
+
 use std::collections::HashSet;
 
 use image::RgbImage;
@@ -14,28 +32,21 @@ use rayon::iter::{
 use sobol_burley::sample_4d;
 
 use crate::{
+    dither::Sierra,
     private,
     rgb_to_lab,
     PaletteBuilder,
+    SixelEncoder,
 };
 
-/// Use Adaptive Distributive Units to "learn" the image's color properties and
-/// select palette entries.
-///
-/// See <httpe://faculty.uca.edu/ecelebi/documents/ISJ_2014.pdf> for the
-/// original paper on this algorithm. This does slightly different parameters
-/// than the paper, but the algorithm is the same core idea and these parameters
-/// work well enough. See the code for the type aliases (e.g.
-/// [`ADUSixelEncoder`](crate::ADUSixelEncoder)) for more default parameters.
-///
-/// The parameters from the paper for a 256 color palette are:
-/// - THETA = (400 * 256^0.5) = 6400
-/// - STEPS = (2 * 256 - 3) * THETA = 3257600
-/// - GAMMA = 0.015 or GAMMA_DIV ~= 64
-///
-/// as is specified by the default arguments to this struct. The type aliases
-/// use signficantly lower values because they are much (up to 10x) faster while
-/// still having pretty good results.
+pub type ADUSixelEncoder8<D = Sierra> = SixelEncoder<ADUPaletteBuilder<8>, D>;
+pub type ADUSixelEncoder16<D = Sierra> = SixelEncoder<ADUPaletteBuilder<16>, D>;
+pub type ADUSixelEncoder32<D = Sierra> = SixelEncoder<ADUPaletteBuilder<32>, D>;
+pub type ADUSixelEncoder64<D = Sierra> = SixelEncoder<ADUPaletteBuilder<64>, D>;
+pub type ADUSixelEncoder128<D = Sierra> = SixelEncoder<ADUPaletteBuilder<128>, D>;
+pub type ADUSixelEncoder256<D = Sierra> = SixelEncoder<ADUPaletteBuilder<256>, D>;
+pub type ADUSixelEncoder256High<D = Sierra> = SixelEncoder<ADUPaletteBuilder, D>;
+
 pub struct ADUPaletteBuilder<
     const PALETTE_SIZE: usize = 256,
     const THETA: usize = 6400,

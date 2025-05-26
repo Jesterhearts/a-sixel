@@ -1,3 +1,5 @@
+//! Use k-means clustering to determine a palette for the image.
+
 use std::{
     array,
     collections::HashSet,
@@ -22,10 +24,21 @@ use rayon::iter::{
 };
 
 use crate::{
+    dither::Sierra,
     private,
     rgb_to_lab,
     PaletteBuilder,
+    SixelEncoder,
 };
+
+pub type KMeansSixelEncoderMono<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<2>, D>;
+pub type KMeansSixelEncoder4<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<4>, D>;
+pub type KMeansSixelEncoder8<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<8>, D>;
+pub type KMeansSixelEncoder16<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<16>, D>;
+pub type KMeansSixelEncoder32<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<32>, D>;
+pub type KMeansSixelEncoder64<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<64>, D>;
+pub type KMeansSixelEncoder128<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<128>, D>;
+pub type KMeansSixelEncoder256<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<256>, D>;
 
 /// Performs K-Means clustering on the image's pixels to build a palette.
 pub struct KMeansPaletteBuilder<const PALETTE_SIZE: usize>;

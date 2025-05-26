@@ -31,13 +31,13 @@
 //!     local statistics. These weighted pixels are then fed into a weighted
 //!     k-means algorithm to produce a palette.
 
-mod adu;
-mod bit;
+pub mod adu;
+pub mod bit;
 pub mod dither;
-mod focal;
-mod kmeans;
-mod median_cut;
-mod octree;
+pub mod focal;
+pub mod kmeans;
+pub mod median_cut;
+pub mod octree;
 
 use std::fmt::Write;
 
@@ -59,10 +59,6 @@ use rayon::{
     slice::ParallelSlice,
 };
 
-use crate::dither::{
-    Dither,
-    Sierra,
-};
 pub use crate::{
     adu::ADUPaletteBuilder,
     bit::BitPaletteBuilder,
@@ -70,6 +66,18 @@ pub use crate::{
     kmeans::KMeansPaletteBuilder,
     median_cut::MedianCutPaletteBuilder,
     octree::OctreePaletteBuilder,
+};
+use crate::{
+    adu::ADUSixelEncoder256,
+    bit::BitSixelEncoder256,
+    dither::{
+        Dither,
+        Sierra,
+    },
+    focal::FocalSixelEncoder256,
+    kmeans::KMeansSixelEncoder256,
+    median_cut::MedianCutSixelEncoder256,
+    octree::OctreeSixelEncoder256,
 };
 
 struct SixelRow<'c> {
@@ -169,74 +177,17 @@ pub struct SixelEncoder<P: PaletteBuilder = FocalPaletteBuilder, D: Dither = Sie
     _d: std::marker::PhantomData<D>,
 }
 
-pub type ADUSixelEncoder8<D = Sierra> = SixelEncoder<ADUPaletteBuilder<8>, D>;
-pub type ADUSixelEncoder16<D = Sierra> = SixelEncoder<ADUPaletteBuilder<16>, D>;
-pub type ADUSixelEncoder32<D = Sierra> = SixelEncoder<ADUPaletteBuilder<32>, D>;
-pub type ADUSixelEncoder64<D = Sierra> = SixelEncoder<ADUPaletteBuilder<64>, D>;
-pub type ADUSixelEncoder128<D = Sierra> = SixelEncoder<ADUPaletteBuilder<128>, D>;
-pub type ADUSixelEncoder256<D = Sierra> = SixelEncoder<ADUPaletteBuilder<256>, D>;
-pub type ADUSixelEncoder256High<D = Sierra> = SixelEncoder<ADUPaletteBuilder, D>;
 pub type ADUSixelEncoder<D = Sierra> = ADUSixelEncoder256<D>;
 
-pub type FocalSixelEncoderMono<D = Sierra> = SixelEncoder<FocalPaletteBuilder<2>, D>;
-pub type FocalSixelEncoder4<D = Sierra> = SixelEncoder<FocalPaletteBuilder<4>, D>;
-pub type FocalSixelEncoder8<D = Sierra> = SixelEncoder<FocalPaletteBuilder<8>, D>;
-pub type FocalSixelEncoder16<D = Sierra> = SixelEncoder<FocalPaletteBuilder<16>, D>;
-pub type FocalSixelEncoder32<D = Sierra> = SixelEncoder<FocalPaletteBuilder<32>, D>;
-pub type FocalSixelEncoder64<D = Sierra> = SixelEncoder<FocalPaletteBuilder<64>, D>;
-pub type FocalSixelEncoder128<D = Sierra> = SixelEncoder<FocalPaletteBuilder<128>, D>;
-pub type FocalSixelEncoder256<D = Sierra> = SixelEncoder<FocalPaletteBuilder<256>, D>;
-pub type FocalSixelEncoder256High<D = Sierra> =
-    SixelEncoder<FocalPaletteBuilder<256, { 1 << 12 }, { 1 << 22 }>, D>;
 pub type FocalSixelEncoder<D = Sierra> = FocalSixelEncoder256<D>;
 
-pub type MedianCutSixelEncoderMono<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<2>, D>;
-pub type MedianCutSixelEncoder4<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<4>, D>;
-pub type MedianCutSixelEncoder8<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<8>, D>;
-pub type MedianCutSixelEncoder16<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<16>, D>;
-pub type MedianCutSixelEncoder32<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<32>, D>;
-pub type MedianCutSixelEncoder64<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<64>, D>;
-pub type MedianCutSixelEncoder128<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<128>, D>;
-pub type MedianCutSixelEncoder256<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<256>, D>;
 pub type MedianCutSixelEncoder<D = Sierra> = MedianCutSixelEncoder256<D>;
 
-pub type BitSixelEncoderMono<D = Sierra> = SixelEncoder<BitPaletteBuilder<2>, D>;
-pub type BitSixelEncoder4<D = Sierra> = SixelEncoder<BitPaletteBuilder<4>, D>;
-pub type BitSixelEncoder8<D = Sierra> = SixelEncoder<BitPaletteBuilder<8>, D>;
-pub type BitSixelEncoder16<D = Sierra> = SixelEncoder<BitPaletteBuilder<16>, D>;
-pub type BitSixelEncoder32<D = Sierra> = SixelEncoder<BitPaletteBuilder<32>, D>;
-pub type BitSixelEncoder64<D = Sierra> = SixelEncoder<BitPaletteBuilder<64>, D>;
-pub type BitSixelEncoder128<D = Sierra> = SixelEncoder<BitPaletteBuilder<128>, D>;
-pub type BitSixelEncoder256<D = Sierra> = SixelEncoder<BitPaletteBuilder<256>, D>;
 pub type BitSixelEncoder<D = Sierra> = BitSixelEncoder256<D>;
 
-pub type OctreeSixelEncoderMono<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<2, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder4<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<4, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder8<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<8, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder16<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<16, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder32<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<32, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder64<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<64, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder128<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<128, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder256<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<256, USE_MIN_HEAP>, D>;
 pub type OctreeSixelEncoder<D = Sierra, const USE_MIN_HEAP: bool = false> =
     OctreeSixelEncoder256<D, USE_MIN_HEAP>;
 
-pub type KMeansSixelEncoderMono<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<2>, D>;
-pub type KMeansSixelEncoder4<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<4>, D>;
-pub type KMeansSixelEncoder8<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<8>, D>;
-pub type KMeansSixelEncoder16<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<16>, D>;
-pub type KMeansSixelEncoder32<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<32>, D>;
-pub type KMeansSixelEncoder64<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<64>, D>;
-pub type KMeansSixelEncoder128<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<128>, D>;
-pub type KMeansSixelEncoder256<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<256>, D>;
 pub type KMeansSixelEncoder<D = Sierra> = KMeansSixelEncoder256<D>;
 
 impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {

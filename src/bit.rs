@@ -1,3 +1,7 @@
+//! Encodes a palette by bucketing bit ranges into a power of two number of
+//! buckets. This is very fast and produces ok results for most images at larger
+//! palette sizes (e.g. 256).
+
 use std::collections::HashSet;
 
 use dilate::DilateExpand;
@@ -9,9 +13,20 @@ use palette::{
 };
 
 use crate::{
+    dither::Sierra,
     private,
     PaletteBuilder,
+    SixelEncoder,
 };
+
+pub type BitSixelEncoderMono<D = Sierra> = SixelEncoder<BitPaletteBuilder<2>, D>;
+pub type BitSixelEncoder4<D = Sierra> = SixelEncoder<BitPaletteBuilder<4>, D>;
+pub type BitSixelEncoder8<D = Sierra> = SixelEncoder<BitPaletteBuilder<8>, D>;
+pub type BitSixelEncoder16<D = Sierra> = SixelEncoder<BitPaletteBuilder<16>, D>;
+pub type BitSixelEncoder32<D = Sierra> = SixelEncoder<BitPaletteBuilder<32>, D>;
+pub type BitSixelEncoder64<D = Sierra> = SixelEncoder<BitPaletteBuilder<64>, D>;
+pub type BitSixelEncoder128<D = Sierra> = SixelEncoder<BitPaletteBuilder<128>, D>;
+pub type BitSixelEncoder256<D = Sierra> = SixelEncoder<BitPaletteBuilder<256>, D>;
 
 #[derive(Debug, Clone, Copy)]
 struct Bucket {
@@ -19,9 +34,6 @@ struct Bucket {
     count: usize,
 }
 
-/// Encodes a palette by bucketing bit ranges into a power of two number of
-/// buckets. This is very fast and produces ok results for most images at larger
-/// palette sizes (e.g. 256).
 #[derive(Debug)]
 pub struct BitPaletteBuilder<const PALETTE_SIZE: usize> {
     buckets: Vec<Bucket>,
