@@ -161,8 +161,7 @@ const fn num2six(num: u8) -> char {
 /// - [`ADUPaletteBuilder`] or [`KMeansPaletteBuilder`] are a good default
 ///   choices for minimizing the error across the image.
 /// - [`FocalPaletteBuilder`] is a good choice if the image has highlights and
-///   other color details that ADU might squash, but is experimental and much
-///   slower.
+///   other color details that ADU might squash, but is experimental.
 /// - Other palette builders are available, but are likely to perform less well
 ///   at image accuracy than these choices.
 ///
