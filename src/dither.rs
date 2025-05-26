@@ -31,6 +31,13 @@ pub trait Dither: private::Sealed {
     const KERNEL: &[(isize, isize, f32)];
     const DIV: f32;
 
+    /// Take the input image and convert it to the input palette, applying a
+    /// dithering algorithm to the result.
+    ///
+    /// `target_palette_size` indicates the size of the palette that was
+    /// targetted during palette creation. This is used by some algorithms e.g.
+    /// Bayer to determine the error level for dithering. It should be `>=
+    /// in_palette.len()`.
     fn dither_and_palettize(
         image: &RgbImage,
         in_palette: &[Lab],

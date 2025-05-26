@@ -135,9 +135,13 @@ mod private {
     pub trait Sealed {}
 }
 
+/// A trait for types that perform quantization of an image to a target palette
+/// size.
 pub trait PaletteBuilder: private::Sealed {
     const PALETTE_SIZE: usize;
 
+    /// Take in an image and return a quantized palette based on the colors in
+    /// the image. The returned vector may be `<= PALETTE_SIZE` in length.
     fn build_palette(image: &RgbImage) -> Vec<Lab>;
 }
 
