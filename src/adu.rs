@@ -11,8 +11,8 @@
 //!
 //! as is specified by the default arguments to this struct.
 //!
-//! See the code for the type aliases (e.g.
-//! [`ADUSixelEncoder`](crate::ADUSixelEncoder)) for more default parameters.
+//! See the code for the type aliases (e.g. [`ADUSixelEncoder16`]) for more
+//! default parameters.
 
 use std::collections::HashSet;
 
