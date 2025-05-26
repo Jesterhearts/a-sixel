@@ -1,18 +1,8 @@
-use std::{
-    collections::HashSet,
-    f32::consts::{
-        E,
-        PI,
-    },
-};
+use std::f32::consts::PI;
 
 use image::{
     Rgb,
     RgbImage,
-};
-use kiddo::{
-    float::kdtree::KdTree,
-    traits::DistanceMetric,
 };
 use libblur::{
     stack_blur_f32,
@@ -21,7 +11,6 @@ use libblur::{
     FastBlurChannels,
     ThreadingPolicy,
 };
-use ordered_float::OrderedFloat;
 use palette::{
     color_difference::EuclideanDistance,
     Lab,
@@ -44,9 +33,9 @@ use rustfft::{
     num_traits::Zero,
     FftPlanner,
 };
-use sobol_burley::sample_4d;
 
 use crate::{
+    kmeans::parallel_kmeans,
     private,
     rgb_to_lab,
     PaletteBuilder,
@@ -382,8 +371,6 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteB
             dump_intermediate("dists", &quant_dists, image_width, image_height);
         }
 
-        let avg_dist = dists.par_iter().copied().sum::<f32>() / dists.len() as f32;
-
         let mut local_dists = vec![0.0f32; pixels.len()];
 
         (0..pixels.len())
@@ -446,6 +433,7 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteB
 
         let avg_local_dist =
             local_dists.par_iter().copied().sum::<f32>() / local_dists.len() as f32;
+        let avg_dist = dists.par_iter().copied().sum::<f32>() / dists.len() as f32;
 
         let mut candidates = vec![(<Lab>::new(0.0, 0.0, 0.0), 0.0); pixels.len()];
         pixels
@@ -504,7 +492,7 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteB
                         outliers + 2.0 * (local - 0.5) * (edges - outliers)
                     };
 
-                    *dest = (lab, w);
+                    *dest = (lab, w.powf(0.5 + (avg_local_dist + avg_dist) * 3.0));
                 },
             );
 
@@ -522,97 +510,7 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize> PaletteB
             dump_intermediate("candidates", &quant_candidates, image_width, image_height);
         }
 
-        candidates.par_sort_by_key(|(_, w)| OrderedFloat(*w));
-
-        let mut palette = candidates[candidates.len() - 1..].to_vec();
-
-        let mut tree = KdTree::<_, _, 5, 257, u32>::with_capacity(PALETTE_SIZE);
-
-        let weight_term = (-avg_dist).exp();
-        for (idx, (lab, w)) in palette.iter().copied().enumerate() {
-            tree.add(&[lab.l, lab.a, lab.b, w, weight_term], idx);
-        }
-
-        let strength = 1.0 - 0.3 * avg_local_dist - 0.7 * avg_dist * avg_local_dist;
-        let skew = |x: f32| x.powf(1.0 / E.powf(strength));
-
-        let alpha = (1.0 + avg_local_dist - avg_dist)
-            .abs()
-            .sqrt()
-            .clamp(0.125, 0.5);
-        let mut wc = [0; PALETTE_SIZE];
-
-        let mut idx = 0;
-        while idx < STEPS / 4 || palette.len() < PALETTE_SIZE {
-            let samples = sample_4d(idx as u32 % (1 << 16), 0, idx as u32 / (1 << 16));
-            idx += 1;
-            for candidate in samples {
-                let candidate = skew(candidate);
-                let (candidate, w) = candidates[(candidate * candidates.len() as f32) as usize];
-
-                let winner = tree.nearest_one::<LabWDist>(&[
-                    candidate.l,
-                    candidate.a,
-                    candidate.b,
-                    w,
-                    weight_term,
-                ]);
-
-                tree.remove(
-                    &[
-                        palette[winner.item].0.l,
-                        palette[winner.item].0.a,
-                        palette[winner.item].0.b,
-                        palette[winner.item].1,
-                        weight_term,
-                    ],
-                    winner.item,
-                );
-
-                palette[winner.item].0.l += (candidate.l - palette[winner.item].0.l) * alpha;
-                palette[winner.item].0.a += (candidate.a - palette[winner.item].0.a) * alpha;
-                palette[winner.item].0.b += (candidate.b - palette[winner.item].0.b) * alpha;
-                palette[winner.item].1 += (w - palette[winner.item].1) * alpha;
-
-                tree.add(
-                    &[
-                        palette[winner.item].0.l,
-                        palette[winner.item].0.a,
-                        palette[winner.item].0.b,
-                        palette[winner.item].1,
-                        weight_term,
-                    ],
-                    winner.item,
-                );
-
-                wc[winner.item] += 1;
-
-                if wc[winner.item] >= THETA && palette.len() < PALETTE_SIZE {
-                    tree.add(
-                        &[candidate.l, candidate.a, candidate.b, w, weight_term],
-                        palette.len(),
-                    );
-
-                    wc[winner.item] = 0;
-                    wc[palette.len()] = 0;
-                    palette.push((candidate, w));
-                }
-            }
-        }
-
-        palette
-            .into_iter()
-            .map(|(lab, _)| {
-                [
-                    OrderedFloat(lab.l),
-                    OrderedFloat(lab.a),
-                    OrderedFloat(lab.b),
-                ]
-            })
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .map(|[l, a, b]| Lab::new(*l, *a, *b))
-            .collect::<Vec<_>>()
+        parallel_kmeans::<PALETTE_SIZE>(&candidates)
     }
 }
 
@@ -1122,20 +1020,6 @@ fn compute_saliency(
         mod_spectral_residual: msr,
         phase_spectrum: pft,
         amplitude_spectrum: asr,
-    }
-}
-
-struct LabWDist;
-
-impl DistanceMetric<f32, 5> for LabWDist {
-    fn dist(a: &[f32; 5], b: &[f32; 5]) -> f32 {
-        let la = <Lab>::new(a[0], a[1], a[2]);
-        let lb = <Lab>::new(b[0], b[1], b[2]);
-        la.distance_squared(lb) + (a[3] - b[3]).abs() * a[4]
-    }
-
-    fn dist1(a: f32, b: f32) -> f32 {
-        (a - b).abs()
     }
 }
 
