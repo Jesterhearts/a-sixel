@@ -13,12 +13,10 @@
 //! ## Choosing an Encoder
 //! - I want fast encoding with good quality:
 //!   - Use [`ADUSixelEncoder`]
-//!   - [`BitSixelEncoder`] can also produce pretty good results for 256 colors
-//!     depending on the image while being over 10x faster.
 //! - I'm time constrained:
-//!   - Use [`ADUSixelEncoder`] or [`BitSixelEncoder`]. You can customize `ADU`
-//!     by lowering the `STEPS` parameter to run faster if necessary while still
-//!     getting good results.
+//!   - Use [`ADUSixelEncoder`], [`OctreeSixelEncoder`], or [`BitSixelEncoder`].
+//!     You can customize `ADU` by lowering the `STEPS` parameter to run faster
+//!     if necessary while still getting good results.
 //! - I'm _really_ time constrained and can sacrifice a little quality:
 //!   - Use [`BitSixelEncoder<NoDither>`].
 //! - I want high quality encoding, and don't mind a bit more computation:
@@ -52,6 +50,7 @@ mod bit;
 pub mod dither;
 mod focal;
 mod median_cut;
+mod octree;
 
 use std::fmt::Write;
 
@@ -82,6 +81,7 @@ pub use crate::{
     bit::BitPaletteBuilder,
     focal::FocalPaletteBuilder,
     median_cut::MedianCutPaletteBuilder,
+    octree::OctreePaletteBuilder,
 };
 
 struct SixelRow<'c> {
@@ -218,9 +218,30 @@ pub type BitSixelEncoder128<D = Sierra> = SixelEncoder<BitPaletteBuilder<128>, D
 pub type BitSixelEncoder256<D = Sierra> = SixelEncoder<BitPaletteBuilder<256>, D>;
 pub type BitSixelEncoder<D = Sierra> = BitSixelEncoder256<D>;
 
+pub type OctreeSixelEncoderMono<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<2, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder4<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<4, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder8<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<8, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder16<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<16, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder32<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<32, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder64<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<64, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder128<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<128, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder256<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    SixelEncoder<OctreePaletteBuilder<256, USE_MIN_HEAP>, D>;
+pub type OctreeSixelEncoder<D = Sierra, const USE_MIN_HEAP: bool = false> =
+    OctreeSixelEncoder256<D, USE_MIN_HEAP>;
+
 impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
     pub fn encode(image: RgbImage) -> String {
+        let timer = std::time::Instant::now();
         let palette = P::build_palette(&image);
+        println!("Palette built in {}ms", timer.elapsed().as_millis());
 
         let mut sixel_string = r#"Pq"1;1;"#.to_string();
         sixel_string

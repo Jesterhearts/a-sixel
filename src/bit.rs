@@ -9,8 +9,8 @@ use palette::{
 };
 
 use crate::{
-    PaletteBuilder,
     private,
+    PaletteBuilder,
 };
 
 #[derive(Debug, Clone, Copy)]

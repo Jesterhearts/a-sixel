@@ -1,42 +1,51 @@
 use std::fs::read;
 
 use a_sixel::{
-    ADUSixelEncoder8,
-    ADUSixelEncoder16,
-    ADUSixelEncoder32,
-    ADUSixelEncoder64,
-    ADUSixelEncoder128,
-    ADUSixelEncoder256,
-    ADUSixelEncoder256High,
-    BitSixelEncoder4,
-    BitSixelEncoder8,
-    BitSixelEncoder16,
-    BitSixelEncoder32,
-    BitSixelEncoder64,
-    BitSixelEncoder128,
-    BitSixelEncoder256,
-    BitSixelEncoderMono,
-    FocalSixelEncoder4,
-    FocalSixelEncoder8,
-    FocalSixelEncoder16,
-    FocalSixelEncoder32,
-    FocalSixelEncoder64,
-    FocalSixelEncoder128,
-    FocalSixelEncoder256,
-    FocalSixelEncoder256High,
-    FocalSixelEncoderMono,
-    MedianCutSixelEncoder4,
-    MedianCutSixelEncoder8,
-    MedianCutSixelEncoder16,
-    MedianCutSixelEncoder32,
-    MedianCutSixelEncoder64,
-    MedianCutSixelEncoder128,
-    MedianCutSixelEncoder256,
-    MedianCutSixelEncoderMono,
     dither::{
         NoDither,
+        Sierra,
         Sobol,
     },
+    ADUSixelEncoder128,
+    ADUSixelEncoder16,
+    ADUSixelEncoder256,
+    ADUSixelEncoder256High,
+    ADUSixelEncoder32,
+    ADUSixelEncoder64,
+    ADUSixelEncoder8,
+    BitSixelEncoder128,
+    BitSixelEncoder16,
+    BitSixelEncoder256,
+    BitSixelEncoder32,
+    BitSixelEncoder4,
+    BitSixelEncoder64,
+    BitSixelEncoder8,
+    BitSixelEncoderMono,
+    FocalSixelEncoder128,
+    FocalSixelEncoder16,
+    FocalSixelEncoder256,
+    FocalSixelEncoder256High,
+    FocalSixelEncoder32,
+    FocalSixelEncoder4,
+    FocalSixelEncoder64,
+    FocalSixelEncoder8,
+    FocalSixelEncoderMono,
+    MedianCutSixelEncoder128,
+    MedianCutSixelEncoder16,
+    MedianCutSixelEncoder256,
+    MedianCutSixelEncoder32,
+    MedianCutSixelEncoder4,
+    MedianCutSixelEncoder64,
+    MedianCutSixelEncoder8,
+    MedianCutSixelEncoderMono,
+    OctreeSixelEncoder128,
+    OctreeSixelEncoder16,
+    OctreeSixelEncoder256,
+    OctreeSixelEncoder32,
+    OctreeSixelEncoder4,
+    OctreeSixelEncoder64,
+    OctreeSixelEncoder8,
+    OctreeSixelEncoderMono,
 };
 use clap::Parser;
 use strum::{
@@ -51,6 +60,7 @@ enum PaletteFormat {
     Focal,
     MedianCut,
     Bit,
+    Octree,
 }
 
 #[derive(Debug, Parser)]
@@ -311,6 +321,64 @@ fn main() -> anyhow::Result<()> {
                     <BitSixelEncoder256<Sobol>>::encode(image)
                 } else {
                     <BitSixelEncoder256>::encode(image)
+                }
+            }
+        },
+        PaletteFormat::Octree => match args.palette_size {
+            0..3 => {
+                if args.sobol {
+                    <OctreeSixelEncoderMono<Sobol>>::encode(image)
+                } else {
+                    <OctreeSixelEncoderMono>::encode(image)
+                }
+            }
+            3..6 => {
+                if args.sobol {
+                    <OctreeSixelEncoder4<Sobol>>::encode(image)
+                } else {
+                    <OctreeSixelEncoder4>::encode(image)
+                }
+            }
+            6..12 => {
+                if args.sobol {
+                    <OctreeSixelEncoder8<Sobol>>::encode(image)
+                } else {
+                    <OctreeSixelEncoder8>::encode(image)
+                }
+            }
+            12..24 => {
+                if args.sobol {
+                    <OctreeSixelEncoder16<Sobol>>::encode(image)
+                } else {
+                    OctreeSixelEncoder16::<Sierra, true>::encode(image)
+                }
+            }
+            24..48 => {
+                if args.sobol {
+                    <OctreeSixelEncoder32<Sobol>>::encode(image)
+                } else {
+                    <OctreeSixelEncoder32>::encode(image)
+                }
+            }
+            48..86 => {
+                if args.sobol {
+                    <OctreeSixelEncoder64<Sobol>>::encode(image)
+                } else {
+                    <OctreeSixelEncoder64>::encode(image)
+                }
+            }
+            86..192 => {
+                if args.sobol {
+                    <OctreeSixelEncoder128<Sobol>>::encode(image)
+                } else {
+                    <OctreeSixelEncoder128>::encode(image)
+                }
+            }
+            _ => {
+                if args.sobol {
+                    <OctreeSixelEncoder256<Sobol>>::encode(image)
+                } else {
+                    <OctreeSixelEncoder256>::encode(image)
                 }
             }
         },

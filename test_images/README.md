@@ -193,6 +193,19 @@ different aspects of various algorithms.
     - Do the street lights and other lighting details still match the original?
     - Does the sky still look a deep blue?
 
+- `phoenix.png`: A flat image with lots of bold colors. Some algoithms corrupt the bold colors if
+  they make bad merge choices, and this image makes it very visually apparent when this happens.
+
+    <details>
+    <summary>View Image</summary>
+    <img src="phoenix.png"/>
+    </details>
+
+    Things to look for:
+    - Are the white panels still white?
+    - Are the black lines still black?
+    - Do the bold primary colors still look correct?
+
 - `rainbows.png`: Pure gradients overlapping.
 
     <details>
