@@ -14,7 +14,7 @@ println!("{}", <ADUSixelEncoder>::encode(&img));
 
 ### Choosing an Encoder
 - I want fast encoding with good quality:
-  - Use `ADUSixelEncoder`
+  - Use `KMeansSixelEncoder` or `ADUSixelEncoder`.
 - I'm time constrained:
   - Use `ADUSixelEncoder`, `BitSixelEncoder`, or `OctreeSixelEncoder`. You can customize `ADU` by
     lowering the `STEPS` parameter to run faster if necessary while still getting good results.

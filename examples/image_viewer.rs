@@ -30,6 +30,14 @@ use a_sixel::{
     FocalSixelEncoder64,
     FocalSixelEncoder8,
     FocalSixelEncoderMono,
+    KMeansSixelEncoder128,
+    KMeansSixelEncoder16,
+    KMeansSixelEncoder256,
+    KMeansSixelEncoder32,
+    KMeansSixelEncoder4,
+    KMeansSixelEncoder64,
+    KMeansSixelEncoder8,
+    KMeansSixelEncoderMono,
     MedianCutSixelEncoder128,
     MedianCutSixelEncoder16,
     MedianCutSixelEncoder256,
@@ -61,6 +69,8 @@ enum PaletteFormat {
     MedianCut,
     Bit,
     Octree,
+    #[strum(serialize = "kmeans", serialize = "k-means")]
+    KMeans,
 }
 
 #[derive(Debug, Parser)]
@@ -379,6 +389,64 @@ fn main() -> anyhow::Result<()> {
                     <OctreeSixelEncoder256<Sobol>>::encode(image)
                 } else {
                     <OctreeSixelEncoder256>::encode(image)
+                }
+            }
+        },
+        PaletteFormat::KMeans => match args.palette_size {
+            0..3 => {
+                if args.sobol {
+                    <KMeansSixelEncoderMono<Sobol>>::encode(image)
+                } else {
+                    <KMeansSixelEncoderMono>::encode(image)
+                }
+            }
+            3..6 => {
+                if args.sobol {
+                    <KMeansSixelEncoder4<Sobol>>::encode(image)
+                } else {
+                    <KMeansSixelEncoder4>::encode(image)
+                }
+            }
+            6..12 => {
+                if args.sobol {
+                    <KMeansSixelEncoder8<Sobol>>::encode(image)
+                } else {
+                    <KMeansSixelEncoder8>::encode(image)
+                }
+            }
+            12..24 => {
+                if args.sobol {
+                    <KMeansSixelEncoder16<Sobol>>::encode(image)
+                } else {
+                    <KMeansSixelEncoder16>::encode(image)
+                }
+            }
+            24..48 => {
+                if args.sobol {
+                    <KMeansSixelEncoder32<Sobol>>::encode(image)
+                } else {
+                    <KMeansSixelEncoder32>::encode(image)
+                }
+            }
+            48..86 => {
+                if args.sobol {
+                    <KMeansSixelEncoder64<Sobol>>::encode(image)
+                } else {
+                    <KMeansSixelEncoder64>::encode(image)
+                }
+            }
+            86..192 => {
+                if args.sobol {
+                    <KMeansSixelEncoder128<Sobol>>::encode(image)
+                } else {
+                    <KMeansSixelEncoder128>::encode(image)
+                }
+            }
+            _ => {
+                if args.sobol {
+                    <KMeansSixelEncoder256<Sobol>>::encode(image)
+                } else {
+                    <KMeansSixelEncoder256>::encode(image)
                 }
             }
         },
