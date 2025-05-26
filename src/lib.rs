@@ -39,7 +39,13 @@ pub mod kmeans;
 pub mod median_cut;
 pub mod octree;
 
-use std::fmt::Write;
+use std::{
+    fmt::Write,
+    sync::atomic::{
+        AtomicBool,
+        Ordering,
+    },
+};
 
 use image::{
     Rgb,
@@ -54,6 +60,7 @@ use palette::{
 use rayon::{
     iter::{
         IndexedParallelIterator,
+        IntoParallelRefIterator,
         ParallelIterator,
     },
     slice::ParallelSlice,
@@ -220,30 +227,28 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
         rows.par_chunks(6)
             .zip(&mut strings)
             .for_each(|(stack, sixel_string)| {
-                let mut row_palette = vec![false; P::PALETTE_SIZE];
-                row_palette.fill(false);
-                for idx in
-                    stack_iter(stack).flat_map(|(((((zero, one), two), three), four), five)| {
-                        std::iter::once(zero)
-                            .chain(one)
-                            .chain(two)
-                            .chain(three)
-                            .chain(four)
-                            .chain(five)
-                    })
-                {
-                    row_palette[idx] = true;
-                }
+                let row_palette =
+                    Vec::from_iter((0..P::PALETTE_SIZE).map(|_| AtomicBool::new(false)));
+                stack
+                    .par_iter()
+                    .flat_map(|row| row.par_iter().copied())
+                    .for_each(|idx| {
+                        row_palette[idx].store(true, Ordering::Relaxed);
+                    });
 
-                for (color, _) in row_palette.iter().copied().enumerate().filter(|(_, v)| *v) {
+                for (color, _) in row_palette
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, v)| v.load(Ordering::Relaxed))
+                {
                     let mut stack_string = SixelRow::new(sixel_string, color);
-                    for (((((zero, one), two), three), four), five) in stack_iter(stack) {
-                        let bits = (zero == color) as u8
-                            | ((one == Some(color)) as u8) << 1
-                            | ((two == Some(color)) as u8) << 2
-                            | ((three == Some(color)) as u8) << 3
-                            | ((four == Some(color)) as u8) << 4
-                            | ((five == Some(color)) as u8) << 5;
+                    for idx in 0..stack[0].len() {
+                        let bits = (stack[0][idx] == color) as u8
+                            | ((stack.get(1).map(|r| r[idx]) == Some(color)) as u8) << 1
+                            | ((stack.get(2).map(|r| r[idx]) == Some(color)) as u8) << 2
+                            | ((stack.get(3).map(|r| r[idx]) == Some(color)) as u8) << 3
+                            | ((stack.get(4).map(|r| r[idx]) == Some(color)) as u8) << 4
+                            | ((stack.get(5).map(|r| r[idx]) == Some(color)) as u8) << 5;
                         let char = num2six(bits);
                         stack_string.push(char);
                     }
@@ -257,73 +262,6 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
 
         sixel_string
     }
-}
-
-type StackTuple = (
-    (
-        (((usize, Option<usize>), Option<usize>), Option<usize>),
-        Option<usize>,
-    ),
-    Option<usize>,
-);
-
-fn stack_iter<'a>(stack: &'a [&[usize]]) -> impl Iterator<Item = StackTuple> + 'a {
-    stack
-        .first()
-        .into_iter()
-        .cloned()
-        .flatten()
-        .copied()
-        .zip(
-            stack
-                .get(1)
-                .into_iter()
-                .cloned()
-                .flatten()
-                .copied()
-                .map(Some)
-                .chain(std::iter::repeat(None)),
-        )
-        .zip(
-            stack
-                .get(2)
-                .into_iter()
-                .cloned()
-                .flatten()
-                .copied()
-                .map(Some)
-                .chain(std::iter::repeat(None)),
-        )
-        .zip(
-            stack
-                .get(3)
-                .into_iter()
-                .cloned()
-                .flatten()
-                .copied()
-                .map(Some)
-                .chain(std::iter::repeat(None)),
-        )
-        .zip(
-            stack
-                .get(4)
-                .into_iter()
-                .cloned()
-                .flatten()
-                .copied()
-                .map(Some)
-                .chain(std::iter::repeat(None)),
-        )
-        .zip(
-            stack
-                .get(5)
-                .into_iter()
-                .cloned()
-                .flatten()
-                .copied()
-                .map(Some)
-                .chain(std::iter::repeat(None)),
-        )
 }
 
 fn rgb_to_lab(Rgb([r, g, b]): Rgb<u8>) -> Lab {
