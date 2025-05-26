@@ -37,11 +37,13 @@ use crate::{
     SixelEncoder,
 };
 
-pub type ADUSixelEncoder8<D = Sierra> = SixelEncoder<ADUPaletteBuilder<8>, D>;
-pub type ADUSixelEncoder16<D = Sierra> = SixelEncoder<ADUPaletteBuilder<16>, D>;
-pub type ADUSixelEncoder32<D = Sierra> = SixelEncoder<ADUPaletteBuilder<32>, D>;
-pub type ADUSixelEncoder64<D = Sierra> = SixelEncoder<ADUPaletteBuilder<64>, D>;
-pub type ADUSixelEncoder128<D = Sierra> = SixelEncoder<ADUPaletteBuilder<128>, D>;
+pub type ADUSixelEncoderMono<D = Sierra> = SixelEncoder<ADUPaletteBuilder<2, 400, 400>, D>;
+pub type ADUSixelEncoder4<D = Sierra> = SixelEncoder<ADUPaletteBuilder<4, 800, 4000>, D>;
+pub type ADUSixelEncoder8<D = Sierra> = SixelEncoder<ADUPaletteBuilder<8, 1131, 14703>, D>;
+pub type ADUSixelEncoder16<D = Sierra> = SixelEncoder<ADUPaletteBuilder<16, 1600, 46400>, D>;
+pub type ADUSixelEncoder32<D = Sierra> = SixelEncoder<ADUPaletteBuilder<32, 2262, 137982>, D>;
+pub type ADUSixelEncoder64<D = Sierra> = SixelEncoder<ADUPaletteBuilder<64, 3200, 400000>, D>;
+pub type ADUSixelEncoder128<D = Sierra> = SixelEncoder<ADUPaletteBuilder<128, 4525, 1144947>, D>;
 pub type ADUSixelEncoder256<D = Sierra> = SixelEncoder<ADUPaletteBuilder<256>, D>;
 
 pub struct ADUPaletteBuilder<
