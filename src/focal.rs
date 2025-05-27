@@ -331,45 +331,9 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             );
         }
 
-        let centroid = pixels.par_iter().copied().reduce(
-            || <Lab>::new(0.0, 0.0, 0.0),
-            |mut acc, color| {
-                acc.l += color.l;
-                acc.a += color.a;
-                acc.b += color.b;
-                acc
-            },
-        ) / pixels.len() as f32;
-
-        let mut dists = vec![0.0f32; pixels.len()];
-        pixels
-            .par_iter()
-            .copied()
-            .zip(&mut dists)
-            .for_each(|(lab, dest)| {
-                *dest = lab.distance(centroid);
-            });
-
-        let max_dist = dists.par_iter().copied().reduce(|| f32::MIN, f32::max);
-        let min_dist = dists.par_iter().copied().reduce(|| f32::MAX, f32::min);
-        dists.par_iter_mut().for_each(|d| {
-            *d = (*d - min_dist) / (max_dist - min_dist).max(f32::EPSILON);
-        });
-
-        #[cfg(feature = "dump_dist_saliency")]
-        {
-            let mut quant_dists = vec![0; pixels.len()];
-            dists
-                .par_iter()
-                .copied()
-                .zip(&mut quant_dists)
-                .for_each(|(d, dest)| {
-                    *dest = (d * u8::MAX as f32).round() as u8;
-                });
-
-            dump_intermediate("dists", &quant_dists, image_width, image_height);
-        }
-
+        let max_dist = (<Lab>::max_l() - <Lab>::min_l()).powi(2)
+            + (<Lab>::max_a() - <Lab>::min_a()).powi(2)
+            + (<Lab>::max_b() - <Lab>::min_b()).powi(2);
         let mut local_dists = vec![0.0f32; pixels.len()];
 
         (0..pixels.len())
@@ -400,21 +364,8 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
                     }
                 }
 
-                *dest = sum / count as f32
+                *dest = (sum / count as f32) / max_dist
             });
-
-        let min_local_dist = local_dists
-            .par_iter()
-            .copied()
-            .reduce(|| f32::MAX, f32::min);
-        let max_local_dist = local_dists
-            .par_iter()
-            .copied()
-            .reduce(|| f32::MIN, f32::max);
-
-        local_dists.par_iter_mut().for_each(|d| {
-            *d = (*d - min_local_dist) / (max_local_dist - min_local_dist).max(f32::EPSILON);
-        });
 
         #[cfg(feature = "dump_local_saliency")]
         {
@@ -446,7 +397,6 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             .zip(b_saliency.phase_spectrum)
             .zip(b_saliency.amplitude_spectrum)
             .zip(local_dists)
-            .zip(dists)
             .zip(&mut candidates)
             .for_each(
                 |(
@@ -457,26 +407,20 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
                                     (
                                         (
                                             (
-                                                (
-                                                    (
-                                                        (((((lab, l_sr), l_msr), l_p), l_a), a_sr),
-                                                        a_msr,
-                                                    ),
-                                                    a_p,
-                                                ),
-                                                a_a,
+                                                ((((((lab, l_sr), l_msr), l_p), l_a), a_sr), a_msr),
+                                                a_p,
                                             ),
-                                            b_sr,
+                                            a_a,
                                         ),
-                                        b_msr,
+                                        b_sr,
                                     ),
-                                    b_p,
+                                    b_msr,
                                 ),
-                                b_a,
+                                b_p,
                             ),
-                            local,
+                            b_a,
                         ),
-                        dist,
+                        local,
                     ),
                     dest,
                 )| {
@@ -494,7 +438,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
                         outliers + 2.0 * (local - 0.5) * (edges - outliers)
                     };
 
-                    *dest = (lab, (w + dist) / 2.0);
+                    *dest = (lab, w);
                 },
             );
 
