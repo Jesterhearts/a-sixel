@@ -30,6 +30,17 @@ different aspects of various algorithms.
     - Are the colors correct?
     - Is the watermark captured?
 
+- `blobs2.png`: Blobs of color around the edges of the LAB color space, with some blobs in the middle. Certain encoders (e.g. k-means) can struggle with this image at smaller palette sizes because they of the way they discover clusters.
+
+    <details>
+    <summary>View Image</summary>
+    <img src="blobs2.png"/>
+    </details>
+
+    Things to look for:
+    - Is the mid-grey blob still present?
+    - Are the other blobs still well represented?
+
 - `bubbles.png`: This is a mixture of performance test and a test of highly varied colors against a
   dominate background.
 

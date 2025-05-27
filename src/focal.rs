@@ -491,7 +491,10 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
                         outliers + 2.0 * (local - 0.5) * (edges - outliers)
                     };
 
-                    *dest = (lab, w.powf(0.25 + (avg_local_dist + avg_dist) * 4.0));
+                    *dest = (
+                        lab,
+                        w.powf(f32::EPSILON + (avg_local_dist + avg_dist) * 5.0),
+                    );
                 },
             );
 
