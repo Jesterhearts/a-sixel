@@ -47,16 +47,21 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for KMediansPaletteBuilder<PALETT
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     fn build_palette(image: &RgbImage) -> Vec<Lab> {
-        let candidates = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
+        let candidates = image
+            .pixels()
+            .copied()
+            .map(rgb_to_lab)
+            .map(|l| (l, 1.0))
+            .collect::<Vec<_>>();
 
         parallel_kmedians::<PALETTE_SIZE>(&candidates)
     }
 }
 
-pub(crate) fn parallel_kmedians<const PALETTE_SIZE: usize>(candidates: &[Lab]) -> Vec<Lab> {
+pub(crate) fn parallel_kmedians<const PALETTE_SIZE: usize>(candidates: &[(Lab, f32)]) -> Vec<Lab> {
     let mut centroids = KdTree::<_, _, 3, 257, u32>::with_capacity(PALETTE_SIZE);
 
-    let center = candidates.par_iter().copied().reduce(
+    let center = candidates.par_iter().map(|(l, _)| *l).reduce(
         || <Lab>::new(0.0, 0.0, 0.0),
         |mut acc, color| {
             acc.l += color.l;
@@ -69,7 +74,7 @@ pub(crate) fn parallel_kmedians<const PALETTE_SIZE: usize>(candidates: &[Lab]) -
 
     let (idx_furthest, _) = (0..candidates.len())
         .map(|idx| {
-            let color = candidates[idx];
+            let (color, _) = candidates[idx];
             let distance = color.distance_squared(center);
             (idx, distance)
         })
@@ -78,18 +83,18 @@ pub(crate) fn parallel_kmedians<const PALETTE_SIZE: usize>(candidates: &[Lab]) -
 
     centroids.add(
         &[
-            candidates[idx_furthest].l,
-            candidates[idx_furthest].a,
-            candidates[idx_furthest].b,
+            candidates[idx_furthest].0.l,
+            candidates[idx_furthest].0.a,
+            candidates[idx_furthest].0.b,
         ],
         0,
     );
 
     for cidx in 1..PALETTE_SIZE {
-        let furthest = candidates
+        let (furthest, _) = candidates
             .par_iter()
             .copied()
-            .max_by_key(|c| {
+            .max_by_key(|(c, _)| {
                 let nearest = centroids.nearest_one::<SquaredEuclidean>(&[c.l, c.a, c.b]);
                 OrderedFloat(nearest.distance)
             })
@@ -103,7 +108,7 @@ pub(crate) fn parallel_kmedians<const PALETTE_SIZE: usize>(candidates: &[Lab]) -
         .par_iter()
         .copied()
         .zip(&mut cluster_assignments)
-        .for_each(|(color, slot)| {
+        .for_each(|((color, _), slot)| {
             let nearest = centroids.nearest_one::<SquaredEuclidean>(&[color.l, color.a, color.b]);
             slot[nearest.item as usize] = true;
         });
@@ -115,53 +120,71 @@ pub(crate) fn parallel_kmedians<const PALETTE_SIZE: usize>(candidates: &[Lab]) -
             let mut ls = candidates
                 .par_iter()
                 .zip(&cluster_assignments)
-                .filter_map(|(color, assignments)| {
-                    if assignments[idx] {
-                        Some(OrderedFloat(color.l))
-                    } else {
+                .filter_map(
+                    |(cw, assignments)| {
+                        if assignments[idx] {
+                            Some(cw)
+                        } else {
+                            None
+                        }
+                    },
+                )
+                .collect::<Vec<_>>();
+
+            ls.par_sort_unstable_by_key(|(color, w)| (OrderedFloat(color.l), OrderedFloat(*w)));
+            let w_sum = ls.par_iter().map(|(_, w)| *w).sum::<f32>();
+            let median_l = ls
+                .iter()
+                .scan(0.0, |sum, (color, w)| {
+                    if *sum >= w_sum / 2.0 {
                         None
+                    } else {
+                        *sum += w;
+                        Some(color)
                     }
                 })
-                .collect::<Vec<_>>();
-            ls.par_sort_unstable();
-            let median_l = ls[ls.len() / 2];
+                .last()
+                .unwrap()
+                .l;
 
-            let mut as_ = candidates
-                .par_iter()
-                .zip(&cluster_assignments)
-                .filter_map(|(color, assignments)| {
-                    if assignments[idx] {
-                        Some(OrderedFloat(color.a))
-                    } else {
+            ls.par_sort_unstable_by_key(|(color, w)| (OrderedFloat(color.a), OrderedFloat(*w)));
+            let median_a = ls
+                .iter()
+                .scan(0.0, |sum, (color, w)| {
+                    if *sum >= w_sum / 2.0 {
                         None
+                    } else {
+                        *sum += w;
+                        Some(color)
                     }
                 })
-                .collect::<Vec<_>>();
-            as_.par_sort_unstable();
-            let median_a = as_[as_.len() / 2];
+                .last()
+                .unwrap()
+                .a;
 
-            let mut bs = candidates
-                .par_iter()
-                .zip(&cluster_assignments)
-                .filter_map(|(color, assignments)| {
-                    if assignments[idx] {
-                        Some(OrderedFloat(color.b))
-                    } else {
+            ls.par_sort_unstable_by_key(|(color, w)| (OrderedFloat(color.b), OrderedFloat(*w)));
+            let median_b = ls
+                .iter()
+                .scan(0.0, |sum, (color, w)| {
+                    if *sum >= w_sum / 2.0 {
                         None
+                    } else {
+                        *sum += w;
+                        Some(color)
                     }
                 })
-                .collect::<Vec<_>>();
-            bs.par_sort_unstable();
-            let median_b = bs[bs.len() / 2];
+                .last()
+                .unwrap()
+                .b;
 
-            centroids.add(&[*median_l, *median_a, *median_b], idx as u32);
+            centroids.add(&[median_l, median_a, median_b], idx as u32);
         }
 
         let shifts = candidates
             .par_iter()
             .copied()
             .zip(&mut cluster_assignments)
-            .map(|(color, slot)| {
+            .map(|((color, _), slot)| {
                 let nearest =
                     centroids.nearest_one::<SquaredEuclidean>(&[color.l, color.a, color.b]);
                 if slot[nearest.item as usize] {

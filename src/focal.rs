@@ -1,5 +1,5 @@
 //! Use weighted pixels based on the image's spectral properties to provided
-//! weighted input to kmeans.
+//! weighted input to k-medians.
 //!
 //! Weights are computed using the following steps:
 //! 1. Compute the saliency maps for each channel (L, a, b) using a combination
@@ -62,7 +62,7 @@ use rustfft::{
 
 use crate::{
     dither::Sierra,
-    kmeans::parallel_kmeans,
+    kmedians::parallel_kmedians,
     private,
     rgb_to_lab,
     PaletteBuilder,
@@ -331,9 +331,11 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             );
         }
 
-        let max_dist = (<Lab>::max_l() - <Lab>::min_l()).powi(2)
+        let max_dist = ((<Lab>::max_l() - <Lab>::min_l()).powi(2)
             + (<Lab>::max_a() - <Lab>::min_a()).powi(2)
-            + (<Lab>::max_b() - <Lab>::min_b()).powi(2);
+            + (<Lab>::max_b() - <Lab>::min_b()).powi(2))
+        .sqrt();
+
         let mut local_dists = vec![0.0f32; pixels.len()];
 
         (0..pixels.len())
@@ -456,7 +458,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             dump_intermediate("candidates", &quant_candidates, image_width, image_height);
         }
 
-        parallel_kmeans::<PALETTE_SIZE>(&candidates)
+        parallel_kmedians::<PALETTE_SIZE>(&candidates)
     }
 }
 
@@ -973,7 +975,6 @@ fn compute_saliency(
     feature = "dump_l_saliency",
     feature = "dump_a_saliency",
     feature = "dump_b_saliency",
-    feature = "dump_dist_saliency",
     feature = "dump_local_saliency",
     feature = "dump_weights"
 ))]

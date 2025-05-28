@@ -99,7 +99,7 @@ enum PaletteFormat {
         serialize = "k-medians",
         serialize = "k-med"
     )]
-    KMedianss,
+    KMedians,
 }
 
 #[derive(Debug, Parser)]
@@ -479,7 +479,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         },
-        PaletteFormat::KMedianss => match args.palette_size {
+        PaletteFormat::KMedians => match args.palette_size {
             0..3 => {
                 if args.sobol {
                     <KMediansSixelEncoderMono<Sobol>>::encode(&image)
