@@ -46,6 +46,16 @@ use a_sixel::{
         KMeansSixelEncoder8,
         KMeansSixelEncoderMono,
     },
+    kmedians::{
+        KMediansSixelEncoder128,
+        KMediansSixelEncoder16,
+        KMediansSixelEncoder256,
+        KMediansSixelEncoder32,
+        KMediansSixelEncoder4,
+        KMediansSixelEncoder64,
+        KMediansSixelEncoder8,
+        KMediansSixelEncoderMono,
+    },
     median_cut::{
         MedianCutSixelEncoder128,
         MedianCutSixelEncoder16,
@@ -83,6 +93,13 @@ enum PaletteFormat {
     Octree,
     #[strum(serialize = "kmeans", serialize = "k-means")]
     KMeans,
+    #[strum(
+        serialize = "kmedians",
+        serialize = "kmed",
+        serialize = "k-medians",
+        serialize = "k-med"
+    )]
+    KMedianss,
 }
 
 #[derive(Debug, Parser)]
@@ -459,6 +476,64 @@ fn main() -> anyhow::Result<()> {
                     <KMeansSixelEncoder256<Sobol>>::encode(&image)
                 } else {
                     <KMeansSixelEncoder256>::encode(&image)
+                }
+            }
+        },
+        PaletteFormat::KMedianss => match args.palette_size {
+            0..3 => {
+                if args.sobol {
+                    <KMediansSixelEncoderMono<Sobol>>::encode(&image)
+                } else {
+                    <KMediansSixelEncoderMono>::encode(&image)
+                }
+            }
+            3..6 => {
+                if args.sobol {
+                    <KMediansSixelEncoder4<Sobol>>::encode(&image)
+                } else {
+                    <KMediansSixelEncoder4>::encode(&image)
+                }
+            }
+            6..12 => {
+                if args.sobol {
+                    <KMediansSixelEncoder8<Sobol>>::encode(&image)
+                } else {
+                    <KMediansSixelEncoder8>::encode(&image)
+                }
+            }
+            12..24 => {
+                if args.sobol {
+                    <KMediansSixelEncoder16<Sobol>>::encode(&image)
+                } else {
+                    <KMediansSixelEncoder16>::encode(&image)
+                }
+            }
+            24..48 => {
+                if args.sobol {
+                    <KMediansSixelEncoder32<Sobol>>::encode(&image)
+                } else {
+                    <KMediansSixelEncoder32>::encode(&image)
+                }
+            }
+            48..86 => {
+                if args.sobol {
+                    <KMediansSixelEncoder64<Sobol>>::encode(&image)
+                } else {
+                    <KMediansSixelEncoder64>::encode(&image)
+                }
+            }
+            86..192 => {
+                if args.sobol {
+                    <KMediansSixelEncoder128<Sobol>>::encode(&image)
+                } else {
+                    <KMediansSixelEncoder128>::encode(&image)
+                }
+            }
+            _ => {
+                if args.sobol {
+                    <KMediansSixelEncoder256<Sobol>>::encode(&image)
+                } else {
+                    <KMediansSixelEncoder256>::encode(&image)
                 }
             }
         },

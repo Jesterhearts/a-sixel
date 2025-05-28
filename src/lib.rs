@@ -20,22 +20,16 @@
 //! - I'm _really_ time constrained and can sacrifice a little quality:
 //!   - Use `BitSixelEncoder<NoDither>`.
 //! - I want high quality encoding, and don't mind a bit more computation:
-//!   - Use `FocalSixelEncoder`.
+//!   - Use `KMediansSixelEncoder`.
 //!   - This matters a lot less if you're not crunching the palette down below
 //!     256 colors.
-//!   - Note that this an experimental encoder. It will *likely* produce
-//!     comparable or better results than other encoders, but may not always do
-//!     so. On the test images, for my personal preferences, I think it's
-//!     slightly better - particularly at small palette sizes. It works by
-//!     computing weights for each pixel based on saliancy maps and measures of
-//!     local statistics. These weighted pixels are then fed into a weighted
-//!     k-means algorithm to produce a palette.
 
 pub mod adu;
 pub mod bit;
 pub mod dither;
 pub mod focal;
 pub mod kmeans;
+pub mod kmedians;
 pub mod median_cut;
 pub mod octree;
 
@@ -71,6 +65,7 @@ pub use crate::{
     bit::BitPaletteBuilder,
     focal::FocalPaletteBuilder,
     kmeans::KMeansPaletteBuilder,
+    kmedians::KMediansPaletteBuilder,
     median_cut::MedianCutPaletteBuilder,
     octree::OctreePaletteBuilder,
 };
@@ -83,6 +78,7 @@ use crate::{
     },
     focal::FocalSixelEncoder256,
     kmeans::KMeansSixelEncoder256,
+    kmedians::KMediansSixelEncoder256,
     median_cut::MedianCutSixelEncoder256,
     octree::OctreeSixelEncoder256,
 };
@@ -165,8 +161,10 @@ const fn num2six(num: u8) -> char {
 /// colors.
 ///
 /// # Choosing a `PaletteBuilder`
-/// - [`ADUPaletteBuilder`] or [`KMeansPaletteBuilder`] are a good default
-///   choices for minimizing the error across the image.
+/// - [`ADUPaletteBuilder`] or [`KMeansPaletteBuilder`] are good default choices
+///   for minimizing the error across the image.
+/// - [`KMediansPaletteBuilder`] is a higher-quality alternative to
+///   [`KMeansPaletteBuilder`], but is slower.
 /// - [`FocalPaletteBuilder`] is a good choice if the image has highlights and
 ///   other color details that ADU might squash, but is experimental.
 /// - Other palette builders are available, but are likely to perform less well
@@ -182,17 +180,13 @@ pub struct SixelEncoder<P: PaletteBuilder = FocalPaletteBuilder, D: Dither = Sie
 }
 
 pub type ADUSixelEncoder<D = Sierra> = ADUSixelEncoder256<D>;
-
-pub type FocalSixelEncoder<D = Sierra> = FocalSixelEncoder256<D>;
-
-pub type MedianCutSixelEncoder<D = Sierra> = MedianCutSixelEncoder256<D>;
-
 pub type BitSixelEncoder<D = Sierra> = BitSixelEncoder256<D>;
-
+pub type FocalSixelEncoder<D = Sierra> = FocalSixelEncoder256<D>;
+pub type KMeansSixelEncoder<D = Sierra> = KMeansSixelEncoder256<D>;
+pub type KMediansPaletteEncoder<D = Sierra> = KMediansSixelEncoder256<D>;
+pub type MedianCutSixelEncoder<D = Sierra> = MedianCutSixelEncoder256<D>;
 pub type OctreeSixelEncoder<D = Sierra, const USE_MIN_HEAP: bool = false> =
     OctreeSixelEncoder256<D, USE_MIN_HEAP>;
-
-pub type KMeansSixelEncoder<D = Sierra> = KMeansSixelEncoder256<D>;
 
 impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
     pub fn encode(image: &RgbImage) -> String {

@@ -19,6 +19,7 @@ use palette::{
 };
 use rayon::iter::{
     IndexedParallelIterator,
+    IntoParallelIterator,
     IntoParallelRefIterator,
     ParallelIterator,
 };
@@ -76,6 +77,7 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(candidates: &[(Lab, f32
     let center = center / weight;
 
     let (idx_furthest, _) = (0..candidates.len())
+        .into_par_iter()
         .map(|idx| {
             let (color, _) = candidates[idx];
             let distance = color.distance_squared(center);
