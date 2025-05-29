@@ -147,6 +147,7 @@ impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool> private::Sealed
 impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool> PaletteBuilder
     for OctreePaletteBuilder<PALETTE_SIZE, USE_MIN_HEAP>
 {
+    const NAME: &'static str = "Octree";
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     fn build_palette(image: &image::RgbImage) -> Vec<palette::Lab> {

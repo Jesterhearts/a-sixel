@@ -47,6 +47,7 @@ pub struct KMeansPaletteBuilder<const PALETTE_SIZE: usize>;
 impl<const PALETTE_SIZE: usize> private::Sealed for KMeansPaletteBuilder<PALETTE_SIZE> {}
 
 impl<const PALETTE_SIZE: usize> PaletteBuilder for KMeansPaletteBuilder<PALETTE_SIZE> {
+    const NAME: &'static str = "K-Means";
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     fn build_palette(image: &RgbImage) -> Vec<Lab> {

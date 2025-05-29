@@ -43,6 +43,7 @@ pub type MedianCutSixelEncoder256<D = Sierra> = SixelEncoder<MedianCutPaletteBui
 pub struct MedianCutPaletteBuilder<const PALETTE_SIZE: usize = 256>;
 impl<const PALETTE_SIZE: usize> private::Sealed for MedianCutPaletteBuilder<PALETTE_SIZE> {}
 impl<const PALETTE_SIZE: usize> PaletteBuilder for MedianCutPaletteBuilder<PALETTE_SIZE> {
+    const NAME: &'static str = "Median-Cut";
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     fn build_palette(image: &RgbImage) -> Vec<Lab> {

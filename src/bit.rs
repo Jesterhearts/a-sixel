@@ -79,6 +79,7 @@ impl<const PALETTE_SIZE: usize> BitPaletteBuilder<PALETTE_SIZE> {
 
 impl<const PALETTE_SIZE: usize> private::Sealed for BitPaletteBuilder<PALETTE_SIZE> {}
 impl<const PALETTE_SIZE: usize> PaletteBuilder for BitPaletteBuilder<PALETTE_SIZE> {
+    const NAME: &'static str = "Bit";
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     fn build_palette(image: &image::RgbImage) -> Vec<Lab> {

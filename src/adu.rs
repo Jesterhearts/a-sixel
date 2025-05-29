@@ -60,6 +60,7 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize, const GA
 impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize, const GAMMA_DIV: usize>
     PaletteBuilder for ADUPaletteBuilder<PALETTE_SIZE, THETA, STEPS, GAMMA_DIV>
 {
+    const NAME: &'static str = "ADU";
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     fn build_palette(image: &RgbImage) -> Vec<Lab> {

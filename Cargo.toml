@@ -18,16 +18,25 @@ dump_a_saliency     = [  ]
 dump_b_saliency     = [  ]
 dump_local_saliency = [  ]
 dump_weights        = [  ]
+# For debugging -- prints the MSE of the quantized image vs the original image.
+dump_mse = [  ]
+# For debugging -- dumps the dssim score of the quantized image vs the original image.
+dump_dssim = [ "dep:dssim-core", "dep:rgb" ]
+# For debugging -- dumps the quantized image to a file with a random file name.
+dump_image = [  ]
 
 [dependencies]
 atomic_float  = "1.1.0"
+dashmap       = { version = "6.1.0", features = [ "rayon" ] }
 dilate        = "0.6.3"
+dssim-core    = { version = "3.2.11", optional = true }
 image         = { version = "0.25.6", default-features = false }
 kiddo         = "5.0.3"
 libblur       = "0.18.0"
 ordered-float = "5.0.0"
 palette       = { version = "0.7.6", default-features = false, features = [ "std" ] }
 rayon         = "1.10.0"
+rgb           = { version = "0.8.50", optional = true }
 rustfft       = "6.3.0"
 sobol_burley  = "0.5.0"
 

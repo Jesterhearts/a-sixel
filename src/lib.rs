@@ -12,17 +12,18 @@
 //!
 //! ## Choosing an Encoder
 //! - I want fast encoding with good quality:
-//!   - Use `KMeansSixelEncoder` or `ADUSixelEncoder`.
+//!   - Use [`KMeansSixelEncoder`] or [`ADUSixelEncoder`].
 //! - I'm time constrained:
-//!   - Use `ADUSixelEncoder`, `BitSixelEncoder`, or `OctreeSixelEncoder`. You
-//!     can customize `ADU` by lowering the `STEPS` parameter to run faster if
-//!     necessary while still getting good results.
+//!   - Use [`ADUSixelEncoder`], [`BitSixelEncoder`], or [`OctreeSixelEncoder`].
+//!     You can customize `ADU` by lowering the `STEPS` parameter to run faster
+//!     if necessary while still getting good results.
 //! - I'm _really_ time constrained and can sacrifice a little quality:
-//!   - Use `BitSixelEncoder<NoDither>`.
+//!   - Use [`BitSixelEncoder<NoDither>`].
 //! - I want high quality encoding, and don't mind a bit more computation:
-//!   - Use `KMediansSixelEncoder`.
+//!   - Use [`KMediansSixelEncoder`] or [`FocalSixelEncoder`]. These can be
+//!     _very_ slow on large images, but produce the highest quality results.
 //!   - This matters a lot less if you're not crunching the palette down below
-//!     256 colors.
+//!     256 colors. At 256 colors, most encoders will produce decent results.
 
 pub mod adu;
 pub mod bit;
@@ -138,6 +139,7 @@ mod private {
 /// size.
 pub trait PaletteBuilder: private::Sealed {
     const PALETTE_SIZE: usize;
+    const NAME: &'static str;
 
     /// Take in an image and return a quantized palette based on the colors in
     /// the image. The returned vector may be `<= PALETTE_SIZE` in length.
@@ -166,7 +168,8 @@ const fn num2six(num: u8) -> char {
 /// - [`KMediansPaletteBuilder`] is a higher-quality alternative to
 ///   [`KMeansPaletteBuilder`], but is slower.
 /// - [`FocalPaletteBuilder`] is a good choice if the image has highlights and
-///   other color details that ADU might squash, but is experimental.
+///   other color details that ADU might squash, but is experimental. It is a
+///   weighted k-medians implementation.
 /// - Other palette builders are available, but are likely to perform less well
 ///   at image accuracy than these choices.
 ///
@@ -174,7 +177,7 @@ const fn num2six(num: u8) -> char {
 /// - [`Sierra`] is a good default choice for dithering, as it produces
 ///   high-quality results with minimal artifacts.
 /// - [`NoDither`](dither::NoDither) can be used if performance is a concern.
-pub struct SixelEncoder<P: PaletteBuilder = FocalPaletteBuilder, D: Dither = Sierra> {
+pub struct SixelEncoder<P: PaletteBuilder = FocalPaletteBuilder<256>, D: Dither = Sierra> {
     _p: std::marker::PhantomData<P>,
     _d: std::marker::PhantomData<D>,
 }
@@ -183,7 +186,7 @@ pub type ADUSixelEncoder<D = Sierra> = ADUSixelEncoder256<D>;
 pub type BitSixelEncoder<D = Sierra> = BitSixelEncoder256<D>;
 pub type FocalSixelEncoder<D = Sierra> = FocalSixelEncoder256<D>;
 pub type KMeansSixelEncoder<D = Sierra> = KMeansSixelEncoder256<D>;
-pub type KMediansPaletteEncoder<D = Sierra> = KMediansSixelEncoder256<D>;
+pub type KMediansSixelEncoder<D = Sierra> = KMediansSixelEncoder256<D>;
 pub type MedianCutSixelEncoder<D = Sierra> = MedianCutSixelEncoder256<D>;
 pub type OctreeSixelEncoder<D = Sierra, const USE_MIN_HEAP: bool = false> =
     OctreeSixelEncoder256<D, USE_MIN_HEAP>;
@@ -212,6 +215,88 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
         }
 
         let paletted_pixels = D::dither_and_palettize(image, &palette, P::PALETTE_SIZE);
+
+        #[cfg(feature = "dump_mse")]
+        {
+            let dequant = paletted_pixels
+                .iter()
+                .map(|&idx| palette[idx])
+                .collect::<Vec<_>>();
+            let mse = dequant
+                .par_iter()
+                .zip(image.par_pixels())
+                .map(|(l, rgb)| {
+                    use palette::color_difference::EuclideanDistance;
+                    let lab = rgb_to_lab(*rgb);
+                    lab.distance_squared(*l)
+                })
+                .sum::<f32>()
+                / (image.width() * image.height()) as f32;
+
+            println!("MSE: {:.2} ({} colors)", mse, P::PALETTE_SIZE);
+        }
+
+        #[cfg(feature = "dump_dssim")]
+        {
+            use dssim_core::Dssim;
+
+            let dssim = Dssim::new();
+            let image_pixels = image
+                .pixels()
+                .copied()
+                .map(|Rgb([r, g, b])| rgb::RGB::new(r, g, b))
+                .collect::<Vec<_>>();
+            let orig = dssim
+                .create_image_rgb(
+                    &image_pixels,
+                    image.width() as usize,
+                    image.height() as usize,
+                )
+                .unwrap();
+
+            let palette_pixels = paletted_pixels
+                .iter()
+                .map(|&idx| {
+                    let lab = palette[idx];
+                    let rgb: palette::Srgb = lab.into_color();
+                    let rgb = rgb.into_format::<u8>();
+                    rgb::RGB::new(rgb.red, rgb.green, rgb.blue)
+                })
+                .collect::<Vec<_>>();
+            let new = dssim
+                .create_image_rgb(
+                    &palette_pixels,
+                    image.width() as usize,
+                    image.height() as usize,
+                )
+                .unwrap();
+
+            let (dssim, _) = dssim.compare(&orig, &new);
+
+            println!("DSSIM: {:.4} ({} colors)", dssim, P::PALETTE_SIZE);
+        }
+
+        #[cfg(feature = "dump_image")]
+        {
+            use std::hash::{
+                BuildHasher,
+                Hasher,
+                RandomState,
+            };
+
+            let mut output_image = image::ImageBuffer::new(image.width(), image.height());
+            for (pixel, &idx) in output_image.pixels_mut().zip(&paletted_pixels) {
+                let lab = palette[idx];
+                let rgb: palette::Srgb = lab.into_color();
+                let rgb = rgb.into_format::<u8>();
+                *pixel = Rgb([rgb.red, rgb.green, rgb.blue]);
+            }
+            let rand = BuildHasher::build_hasher(&RandomState::new()).finish();
+
+            output_image
+                .save(format!("{}-{rand}.png", P::NAME))
+                .expect("Failed to save output image");
+        }
 
         let rows: Vec<&[usize]> = paletted_pixels
             .chunks(image.width() as usize)

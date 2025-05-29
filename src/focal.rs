@@ -62,7 +62,7 @@ use rustfft::{
 
 use crate::{
     dither::Sierra,
-    kmedians::parallel_kmedians,
+    kmeans::parallel_kmeans,
     private,
     rgb_to_lab,
     PaletteBuilder,
@@ -83,6 +83,7 @@ pub struct FocalPaletteBuilder<const PALETTE_SIZE: usize = 256>;
 impl<const PALETTE_SIZE: usize> private::Sealed for FocalPaletteBuilder<PALETTE_SIZE> {}
 
 impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_SIZE> {
+    const NAME: &'static str = "Focal";
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     #[inline(never)]
@@ -458,7 +459,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             dump_intermediate("candidates", &quant_candidates, image_width, image_height);
         }
 
-        parallel_kmedians::<PALETTE_SIZE>(&candidates)
+        parallel_kmeans::<PALETTE_SIZE>(&candidates)
     }
 }
 
