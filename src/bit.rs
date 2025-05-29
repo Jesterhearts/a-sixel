@@ -29,33 +29,30 @@ pub type BitSixelEncoder128<D = Sierra> = SixelEncoder<BitPaletteBuilder<128>, D
 pub type BitSixelEncoder256<D = Sierra> = SixelEncoder<BitPaletteBuilder<256>, D>;
 
 #[derive(Debug, Clone, Copy)]
-struct Bucket {
-    color: (u64, u64, u64),
-    count: usize,
+pub(crate) struct Bucket {
+    pub(crate) color: (u64, u64, u64),
+    pub(crate) count: u64,
 }
 
 #[derive(Debug)]
 pub struct BitPaletteBuilder<const PALETTE_SIZE: usize> {
-    buckets: Vec<Bucket>,
+    pub(crate) buckets: [Bucket; PALETTE_SIZE],
 }
 
 impl<const PALETTE_SIZE: usize> BitPaletteBuilder<PALETTE_SIZE> {
     const PALETTE_DEPTH: usize = PALETTE_SIZE.ilog2() as usize;
     const SHIFT: usize = 24 - Self::PALETTE_DEPTH;
 
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         BitPaletteBuilder {
-            buckets: vec![
-                Bucket {
-                    color: (0, 0, 0),
-                    count: 0,
-                };
-                PALETTE_SIZE
-            ],
+            buckets: [Bucket {
+                color: (0, 0, 0),
+                count: 0,
+            }; PALETTE_SIZE],
         }
     }
 
-    fn insert(&mut self, color: Srgb<u8>) {
+    pub(crate) fn insert(&mut self, color: Srgb<u8>) {
         let index = {
             let r = color.red.dilate_expand::<3>().value();
             let g = color.green.dilate_expand::<3>().value();
@@ -95,9 +92,9 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for BitPaletteBuilder<PALETTE_SIZ
             .filter(|node| node.count > 0)
             .map(|node| {
                 let rgb = Srgb::new(
-                    (node.color.0 / node.count as u64) as u8,
-                    (node.color.1 / node.count as u64) as u8,
-                    (node.color.2 / node.count as u64) as u8,
+                    (node.color.0 / node.count) as u8,
+                    (node.color.1 / node.count) as u8,
+                    (node.color.2 / node.count) as u8,
                 );
                 let lab: Lab = rgb.into_format().into_color();
                 [

@@ -24,9 +24,22 @@
 //!     _very_ slow on large images, but produce the highest quality results.
 //!   - This matters a lot less if you're not crunching the palette down below
 //!     256 colors. At 256 colors, most encoders will produce decent results.
+//!
+//! For a more detailed breakdown, here's the top encoders by average speed and
+//! quality against the test images (speed figures will vary by machine):
+//!
+//! |    Algorithm         |    MSE        |    DSSIM     |    Execution Time (ms)    |
+//! |:---------------------|:-------------:|:------------:|--------------------------:|
+//! |    bit               |    34.06      |    0.0124    |     332                   |
+//! |    bit-merge         |    16.30      |    0.0059    |     492                   |
+//! |    bit-merge-better  |    14.07      |    0.0053    |     732                   |
+//! |    bit-merge-best    |    12.17      |    0.0043    |    2120                   |
+//! |    adu               |    15.56      |    0.0054    |    1407                   |
+//! |    k-means           |    10.86      |    0.0040    |    6273                   |
 
 pub mod adu;
 pub mod bit;
+pub mod bitmerge;
 pub mod dither;
 pub mod focal;
 pub mod kmeans;
@@ -64,6 +77,7 @@ use rayon::{
 pub use crate::{
     adu::ADUPaletteBuilder,
     bit::BitPaletteBuilder,
+    bitmerge::BitMergePaletteBuilder,
     focal::FocalPaletteBuilder,
     kmeans::KMeansPaletteBuilder,
     kmedians::KMediansPaletteBuilder,
@@ -73,6 +87,7 @@ pub use crate::{
 use crate::{
     adu::ADUSixelEncoder256,
     bit::BitSixelEncoder256,
+    bitmerge::BitMergeSixelEncoder256,
     dither::{
         Dither,
         Sierra,
@@ -183,6 +198,9 @@ pub struct SixelEncoder<P: PaletteBuilder = FocalPaletteBuilder<256>, D: Dither 
 }
 
 pub type ADUSixelEncoder<D = Sierra> = ADUSixelEncoder256<D>;
+pub type BitMergeSixelEncoder<D = Sierra> = BitMergeSixelEncoder256<D>;
+pub type BitMergeSixelEncoderBetter<D = Sierra> = BitMergeSixelEncoder256<D, 2048>;
+pub type BitMergeSixelEncoderBest<D = Sierra> = BitMergeSixelEncoder256<D, 4096>;
 pub type BitSixelEncoder<D = Sierra> = BitSixelEncoder256<D>;
 pub type FocalSixelEncoder<D = Sierra> = FocalSixelEncoder256<D>;
 pub type KMeansSixelEncoder<D = Sierra> = KMeansSixelEncoder256<D>;

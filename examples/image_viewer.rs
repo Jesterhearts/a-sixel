@@ -21,6 +21,16 @@ use a_sixel::{
         BitSixelEncoder8,
         BitSixelEncoderMono,
     },
+    bitmerge::{
+        BitMergeSixelEncoder128,
+        BitMergeSixelEncoder16,
+        BitMergeSixelEncoder256,
+        BitMergeSixelEncoder32,
+        BitMergeSixelEncoder4,
+        BitMergeSixelEncoder64,
+        BitMergeSixelEncoder8,
+        BitMergeSixelEncoderMono,
+    },
     dither::{
         NoDither,
         Sierra,
@@ -76,6 +86,8 @@ use a_sixel::{
         OctreeSixelEncoder8,
         OctreeSixelEncoderMono,
     },
+    BitMergeSixelEncoderBest,
+    BitMergeSixelEncoderBetter,
 };
 use clap::Parser;
 use strum::{
@@ -90,6 +102,7 @@ enum PaletteFormat {
     Focal,
     MedianCut,
     Bit,
+    BitMerge,
     Octree,
     #[strum(serialize = "kmeans", serialize = "k-means")]
     KMeans,
@@ -360,6 +373,79 @@ fn main() -> anyhow::Result<()> {
                     <BitSixelEncoder256<Sobol>>::encode(&image)
                 } else {
                     <BitSixelEncoder256>::encode(&image)
+                }
+            }
+        },
+        PaletteFormat::BitMerge => match args.palette_size {
+            0 => <BitMergeSixelEncoder256<NoDither>>::encode(&image),
+            1..3 => {
+                if args.sobol {
+                    <BitMergeSixelEncoderMono<Sobol>>::encode(&image)
+                } else {
+                    <BitMergeSixelEncoderMono>::encode(&image)
+                }
+            }
+            3..6 => {
+                if args.sobol {
+                    <BitMergeSixelEncoder4<Sobol>>::encode(&image)
+                } else {
+                    <BitMergeSixelEncoder4>::encode(&image)
+                }
+            }
+            6..12 => {
+                if args.sobol {
+                    <BitMergeSixelEncoder8<Sobol>>::encode(&image)
+                } else {
+                    <BitMergeSixelEncoder8>::encode(&image)
+                }
+            }
+            12..24 => {
+                if args.sobol {
+                    <BitMergeSixelEncoder16<Sobol>>::encode(&image)
+                } else {
+                    <BitMergeSixelEncoder16>::encode(&image)
+                }
+            }
+            24..48 => {
+                if args.sobol {
+                    <BitMergeSixelEncoder32<Sobol>>::encode(&image)
+                } else {
+                    <BitMergeSixelEncoder32>::encode(&image)
+                }
+            }
+            48..86 => {
+                if args.sobol {
+                    <BitMergeSixelEncoder64<Sobol>>::encode(&image)
+                } else {
+                    <BitMergeSixelEncoder64>::encode(&image)
+                }
+            }
+            86..192 => {
+                if args.sobol {
+                    <BitMergeSixelEncoder128<Sobol>>::encode(&image)
+                } else {
+                    <BitMergeSixelEncoder128>::encode(&image)
+                }
+            }
+            256 => {
+                if args.sobol {
+                    <BitMergeSixelEncoder256<Sobol>>::encode(&image)
+                } else {
+                    <BitMergeSixelEncoder256>::encode(&image)
+                }
+            }
+            257 => {
+                if args.sobol {
+                    <BitMergeSixelEncoderBetter<Sobol>>::encode(&image)
+                } else {
+                    <BitMergeSixelEncoderBetter>::encode(&image)
+                }
+            }
+            _ => {
+                if args.sobol {
+                    <BitMergeSixelEncoderBest<Sobol>>::encode(&image)
+                } else {
+                    <BitMergeSixelEncoderBest>::encode(&image)
                 }
             }
         },
