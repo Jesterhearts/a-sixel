@@ -16,6 +16,7 @@ use std::collections::{
     HashSet,
 };
 
+use dilate::DilateExpand;
 use ordered_float::OrderedFloat;
 use palette::{
     IntoColor,
@@ -105,11 +106,13 @@ impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool>
     }
 
     fn insert(&mut self, color: Srgb<u8>) {
-        // Indexing uses the bottom bits first, so we put the most significant part of
-        // the color in those bits. Using the order for luminance leads to blue
-        // green red order.
-        let mut index_bits =
-            ((color.blue as u32) << 16) | ((color.green as u32) << 8) | color.red as u32;
+        let r = color.red.dilate_expand::<3>().value();
+        let g = color.green.dilate_expand::<3>().value();
+        let b = color.blue.dilate_expand::<3>().value();
+
+        // Bit order here doesn't really matter because we always take 3 bits at a time.
+        // So we just use the same order as bit.rs
+        let mut index_bits = g << 2 | r << 1 | b;
         let mut node_index = 0;
 
         for depth in 0..7 {
