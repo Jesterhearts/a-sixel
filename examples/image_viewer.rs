@@ -32,7 +32,7 @@ use a_sixel::{
         BitMergeSixelEncoderMono,
     },
     dither::{
-        NoDither,
+        Bayer,
         Sobol,
     },
     focal::{
@@ -85,8 +85,6 @@ use a_sixel::{
         OctreeSixelEncoder8,
         OctreeSixelEncoderMono,
     },
-    BitMergeSixelEncoderBest,
-    BitMergeSixelEncoderBetter,
 };
 use clap::Parser;
 use strum::{
@@ -114,6 +112,14 @@ enum PaletteFormat {
     KMedians,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display)]
+#[strum(ascii_case_insensitive, serialize_all = "kebab-case")]
+enum Dither {
+    Sierra,
+    Sobol,
+    Bayer,
+}
+
 #[derive(Debug, Parser)]
 struct Args {
     /// The path to the image file to be loaded and rendered
@@ -130,8 +136,8 @@ struct Args {
     palette_format: PaletteFormat,
 
     /// Whether to use Sobol dithering instead of the default dithering.
-    #[clap(long, short, default_value_t = false)]
-    sobol: bool,
+    #[clap(long, short, default_value_t = Dither::Sierra)]
+    dither: Dither,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -154,484 +160,340 @@ fn main() -> anyhow::Result<()> {
 
     let six = match args.palette_format {
         PaletteFormat::Adu => match args.palette_size {
-            0..3 => {
-                if args.sobol {
-                    <ADUSixelEncoderMono<Sobol>>::encode(&image)
-                } else {
-                    <ADUSixelEncoderMono>::encode(&image)
-                }
-            }
-            3..6 => {
-                if args.sobol {
-                    <ADUSixelEncoder4<Sobol>>::encode(&image)
-                } else {
-                    <ADUSixelEncoder4>::encode(&image)
-                }
-            }
-            6..12 => {
-                if args.sobol {
-                    <ADUSixelEncoder8<Sobol>>::encode(&image)
-                } else {
-                    <ADUSixelEncoder8>::encode(&image)
-                }
-            }
-            12..24 => {
-                if args.sobol {
-                    <ADUSixelEncoder16<Sobol>>::encode(&image)
-                } else {
-                    <ADUSixelEncoder16>::encode(&image)
-                }
-            }
-            24..48 => {
-                if args.sobol {
-                    <ADUSixelEncoder32<Sobol>>::encode(&image)
-                } else {
-                    <ADUSixelEncoder32>::encode(&image)
-                }
-            }
-            48..86 => {
-                if args.sobol {
-                    <ADUSixelEncoder64<Sobol>>::encode(&image)
-                } else {
-                    <ADUSixelEncoder64>::encode(&image)
-                }
-            }
-            86..192 => {
-                if args.sobol {
-                    <ADUSixelEncoder128<Sobol>>::encode(&image)
-                } else {
-                    <ADUSixelEncoder128>::encode(&image)
-                }
-            }
-            _ => {
-                if args.sobol {
-                    <ADUSixelEncoder256<Sobol>>::encode(&image)
-                } else {
-                    <ADUSixelEncoder256>::encode(&image)
-                }
-            }
+            0..3 => match args.dither {
+                Dither::Sobol => <ADUSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <ADUSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <ADUSixelEncoderMono<Bayer>>::encode(&image),
+            },
+            3..6 => match args.dither {
+                Dither::Sobol => <ADUSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <ADUSixelEncoder4>::encode(&image),
+                Dither::Bayer => <ADUSixelEncoder4<Bayer>>::encode(&image),
+            },
+            6..12 => match args.dither {
+                Dither::Sobol => <ADUSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <ADUSixelEncoder8>::encode(&image),
+                Dither::Bayer => <ADUSixelEncoder8<Bayer>>::encode(&image),
+            },
+            12..24 => match args.dither {
+                Dither::Sobol => <ADUSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <ADUSixelEncoder16>::encode(&image),
+                Dither::Bayer => <ADUSixelEncoder16<Bayer>>::encode(&image),
+            },
+            24..48 => match args.dither {
+                Dither::Sobol => <ADUSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <ADUSixelEncoder32>::encode(&image),
+                Dither::Bayer => <ADUSixelEncoder32<Bayer>>::encode(&image),
+            },
+            48..86 => match args.dither {
+                Dither::Sobol => <ADUSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <ADUSixelEncoder64>::encode(&image),
+                Dither::Bayer => <ADUSixelEncoder64<Bayer>>::encode(&image),
+            },
+            86..192 => match args.dither {
+                Dither::Sobol => <ADUSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <ADUSixelEncoder128>::encode(&image),
+                Dither::Bayer => <ADUSixelEncoder128<Bayer>>::encode(&image),
+            },
+            _ => match args.dither {
+                Dither::Sobol => <ADUSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <ADUSixelEncoder256>::encode(&image),
+                Dither::Bayer => <ADUSixelEncoder256<Bayer>>::encode(&image),
+            },
         },
         PaletteFormat::Focal => match args.palette_size {
-            0..3 => {
-                if args.sobol {
-                    <FocalSixelEncoderMono<Sobol>>::encode(&image)
-                } else {
-                    <FocalSixelEncoderMono>::encode(&image)
-                }
-            }
-            3..6 => {
-                if args.sobol {
-                    <FocalSixelEncoder4<Sobol>>::encode(&image)
-                } else {
-                    <FocalSixelEncoder4>::encode(&image)
-                }
-            }
-            6..12 => {
-                if args.sobol {
-                    <FocalSixelEncoder8<Sobol>>::encode(&image)
-                } else {
-                    <FocalSixelEncoder8>::encode(&image)
-                }
-            }
-            12..24 => {
-                if args.sobol {
-                    <FocalSixelEncoder16<Sobol>>::encode(&image)
-                } else {
-                    <FocalSixelEncoder16>::encode(&image)
-                }
-            }
-            24..48 => {
-                if args.sobol {
-                    <FocalSixelEncoder32<Sobol>>::encode(&image)
-                } else {
-                    <FocalSixelEncoder32>::encode(&image)
-                }
-            }
-            48..86 => {
-                if args.sobol {
-                    <FocalSixelEncoder64<Sobol>>::encode(&image)
-                } else {
-                    <FocalSixelEncoder64>::encode(&image)
-                }
-            }
-            86..192 => {
-                if args.sobol {
-                    <FocalSixelEncoder128<Sobol>>::encode(&image)
-                } else {
-                    <FocalSixelEncoder128>::encode(&image)
-                }
-            }
-            _ => {
-                if args.sobol {
-                    <FocalSixelEncoder256<Sobol>>::encode(&image)
-                } else {
-                    <FocalSixelEncoder256>::encode(&image)
-                }
-            }
+            0..3 => match args.dither {
+                Dither::Sobol => <FocalSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoderMono<Bayer>>::encode(&image),
+            },
+            3..6 => match args.dither {
+                Dither::Sobol => <FocalSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder4>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder4<Bayer>>::encode(&image),
+            },
+            6..12 => match args.dither {
+                Dither::Sobol => <FocalSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder8>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder8<Bayer>>::encode(&image),
+            },
+            12..24 => match args.dither {
+                Dither::Sobol => <FocalSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder16>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder16<Bayer>>::encode(&image),
+            },
+            24..48 => match args.dither {
+                Dither::Sobol => <FocalSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder32>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder32<Bayer>>::encode(&image),
+            },
+            48..86 => match args.dither {
+                Dither::Sobol => <FocalSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder64>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder64<Bayer>>::encode(&image),
+            },
+            86..192 => match args.dither {
+                Dither::Sobol => <FocalSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder128>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder128<Bayer>>::encode(&image),
+            },
+            _ => match args.dither {
+                Dither::Sobol => <FocalSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder256>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder256<Bayer>>::encode(&image),
+            },
         },
         PaletteFormat::MedianCut => match args.palette_size {
-            0..3 => {
-                if args.sobol {
-                    <MedianCutSixelEncoderMono<Sobol>>::encode(&image)
-                } else {
-                    <MedianCutSixelEncoderMono>::encode(&image)
-                }
-            }
-            3..6 => {
-                if args.sobol {
-                    <MedianCutSixelEncoder4<Sobol>>::encode(&image)
-                } else {
-                    <MedianCutSixelEncoder4>::encode(&image)
-                }
-            }
-            6..12 => {
-                if args.sobol {
-                    <MedianCutSixelEncoder8<Sobol>>::encode(&image)
-                } else {
-                    <MedianCutSixelEncoder8>::encode(&image)
-                }
-            }
-            12..24 => {
-                if args.sobol {
-                    <MedianCutSixelEncoder16<Sobol>>::encode(&image)
-                } else {
-                    <MedianCutSixelEncoder16>::encode(&image)
-                }
-            }
-            24..48 => {
-                if args.sobol {
-                    <MedianCutSixelEncoder32<Sobol>>::encode(&image)
-                } else {
-                    <MedianCutSixelEncoder32>::encode(&image)
-                }
-            }
-            48..86 => {
-                if args.sobol {
-                    <MedianCutSixelEncoder64<Sobol>>::encode(&image)
-                } else {
-                    <MedianCutSixelEncoder64>::encode(&image)
-                }
-            }
-            86..192 => {
-                if args.sobol {
-                    <MedianCutSixelEncoder128<Sobol>>::encode(&image)
-                } else {
-                    <MedianCutSixelEncoder128>::encode(&image)
-                }
-            }
-            _ => {
-                if args.sobol {
-                    <MedianCutSixelEncoder256<Sobol>>::encode(&image)
-                } else {
-                    <MedianCutSixelEncoder256>::encode(&image)
-                }
-            }
+            0..3 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoderMono<Bayer>>::encode(&image),
+            },
+            3..6 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder4>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder4<Bayer>>::encode(&image),
+            },
+            6..12 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder8>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder8<Bayer>>::encode(&image),
+            },
+            12..24 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder16>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder16<Bayer>>::encode(&image),
+            },
+            24..48 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder32>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder32<Bayer>>::encode(&image),
+            },
+            48..86 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder64>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder64<Bayer>>::encode(&image),
+            },
+            86..192 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder128>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder128<Bayer>>::encode(&image),
+            },
+            _ => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder256>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder256<Bayer>>::encode(&image),
+            },
         },
         PaletteFormat::Bit => match args.palette_size {
-            0 => <BitSixelEncoder256<NoDither>>::encode(&image),
-            1..3 => {
-                if args.sobol {
-                    <BitSixelEncoderMono<Sobol>>::encode(&image)
-                } else {
-                    <BitSixelEncoderMono>::encode(&image)
-                }
-            }
-            3..6 => {
-                if args.sobol {
-                    <BitSixelEncoder4<Sobol>>::encode(&image)
-                } else {
-                    <BitSixelEncoder4>::encode(&image)
-                }
-            }
-            6..12 => {
-                if args.sobol {
-                    <BitSixelEncoder8<Sobol>>::encode(&image)
-                } else {
-                    <BitSixelEncoder8>::encode(&image)
-                }
-            }
-            12..24 => {
-                if args.sobol {
-                    <BitSixelEncoder16<Sobol>>::encode(&image)
-                } else {
-                    <BitSixelEncoder16>::encode(&image)
-                }
-            }
-            24..48 => {
-                if args.sobol {
-                    <BitSixelEncoder32<Sobol>>::encode(&image)
-                } else {
-                    <BitSixelEncoder32>::encode(&image)
-                }
-            }
-            48..86 => {
-                if args.sobol {
-                    <BitSixelEncoder64<Sobol>>::encode(&image)
-                } else {
-                    <BitSixelEncoder64>::encode(&image)
-                }
-            }
-            86..192 => {
-                if args.sobol {
-                    <BitSixelEncoder128<Sobol>>::encode(&image)
-                } else {
-                    <BitSixelEncoder128>::encode(&image)
-                }
-            }
-            _ => {
-                if args.sobol {
-                    <BitSixelEncoder256<Sobol>>::encode(&image)
-                } else {
-                    <BitSixelEncoder256>::encode(&image)
-                }
-            }
+            0..3 => match args.dither {
+                Dither::Sobol => <BitSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <BitSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <BitSixelEncoderMono<Bayer>>::encode(&image),
+            },
+            3..6 => match args.dither {
+                Dither::Sobol => <BitSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <BitSixelEncoder4>::encode(&image),
+                Dither::Bayer => <BitSixelEncoder4<Bayer>>::encode(&image),
+            },
+            6..12 => match args.dither {
+                Dither::Sobol => <BitSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <BitSixelEncoder8>::encode(&image),
+                Dither::Bayer => <BitSixelEncoder8<Bayer>>::encode(&image),
+            },
+            12..24 => match args.dither {
+                Dither::Sobol => <BitSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <BitSixelEncoder16>::encode(&image),
+                Dither::Bayer => <BitSixelEncoder16<Bayer>>::encode(&image),
+            },
+            24..48 => match args.dither {
+                Dither::Sobol => <BitSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <BitSixelEncoder32>::encode(&image),
+                Dither::Bayer => <BitSixelEncoder32<Bayer>>::encode(&image),
+            },
+            48..86 => match args.dither {
+                Dither::Sobol => <BitSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <BitSixelEncoder64>::encode(&image),
+                Dither::Bayer => <BitSixelEncoder64<Bayer>>::encode(&image),
+            },
+            86..192 => match args.dither {
+                Dither::Sobol => <BitSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <BitSixelEncoder128>::encode(&image),
+                Dither::Bayer => <BitSixelEncoder128<Bayer>>::encode(&image),
+            },
+            _ => match args.dither {
+                Dither::Sobol => <BitSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <BitSixelEncoder256>::encode(&image),
+                Dither::Bayer => <BitSixelEncoder256<Bayer>>::encode(&image),
+            },
         },
         PaletteFormat::BitMerge => match args.palette_size {
-            0 => <BitMergeSixelEncoder256<NoDither>>::encode(&image),
-            1..3 => {
-                if args.sobol {
-                    <BitMergeSixelEncoderMono<Sobol>>::encode(&image)
-                } else {
-                    <BitMergeSixelEncoderMono>::encode(&image)
-                }
-            }
-            3..6 => {
-                if args.sobol {
-                    <BitMergeSixelEncoder4<Sobol>>::encode(&image)
-                } else {
-                    <BitMergeSixelEncoder4>::encode(&image)
-                }
-            }
-            6..12 => {
-                if args.sobol {
-                    <BitMergeSixelEncoder8<Sobol>>::encode(&image)
-                } else {
-                    <BitMergeSixelEncoder8>::encode(&image)
-                }
-            }
-            12..24 => {
-                if args.sobol {
-                    <BitMergeSixelEncoder16<Sobol>>::encode(&image)
-                } else {
-                    <BitMergeSixelEncoder16>::encode(&image)
-                }
-            }
-            24..48 => {
-                if args.sobol {
-                    <BitMergeSixelEncoder32<Sobol>>::encode(&image)
-                } else {
-                    <BitMergeSixelEncoder32>::encode(&image)
-                }
-            }
-            48..86 => {
-                if args.sobol {
-                    <BitMergeSixelEncoder64<Sobol>>::encode(&image)
-                } else {
-                    <BitMergeSixelEncoder64>::encode(&image)
-                }
-            }
-            86..192 => {
-                if args.sobol {
-                    <BitMergeSixelEncoder128<Sobol>>::encode(&image)
-                } else {
-                    <BitMergeSixelEncoder128>::encode(&image)
-                }
-            }
-            256 => {
-                if args.sobol {
-                    <BitMergeSixelEncoder256<Sobol>>::encode(&image)
-                } else {
-                    <BitMergeSixelEncoder256>::encode(&image)
-                }
-            }
-            257 => {
-                if args.sobol {
-                    <BitMergeSixelEncoderBetter<Sobol>>::encode(&image)
-                } else {
-                    <BitMergeSixelEncoderBetter>::encode(&image)
-                }
-            }
-            _ => {
-                if args.sobol {
-                    <BitMergeSixelEncoderBest<Sobol>>::encode(&image)
-                } else {
-                    <BitMergeSixelEncoderBest>::encode(&image)
-                }
-            }
+            0..3 => match args.dither {
+                Dither::Sobol => <BitMergeSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <BitMergeSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <BitMergeSixelEncoderMono<Bayer>>::encode(&image),
+            },
+            3..6 => match args.dither {
+                Dither::Sobol => <BitMergeSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <BitMergeSixelEncoder4>::encode(&image),
+                Dither::Bayer => <BitMergeSixelEncoder4<Bayer>>::encode(&image),
+            },
+            6..12 => match args.dither {
+                Dither::Sobol => <BitMergeSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <BitMergeSixelEncoder8>::encode(&image),
+                Dither::Bayer => <BitMergeSixelEncoder8<Bayer>>::encode(&image),
+            },
+            12..24 => match args.dither {
+                Dither::Sobol => <BitMergeSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <BitMergeSixelEncoder16>::encode(&image),
+                Dither::Bayer => <BitMergeSixelEncoder16<Bayer>>::encode(&image),
+            },
+            24..48 => match args.dither {
+                Dither::Sobol => <BitMergeSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <BitMergeSixelEncoder32>::encode(&image),
+                Dither::Bayer => <BitMergeSixelEncoder32<Bayer>>::encode(&image),
+            },
+            48..86 => match args.dither {
+                Dither::Sobol => <BitMergeSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <BitMergeSixelEncoder64>::encode(&image),
+                Dither::Bayer => <BitMergeSixelEncoder64<Bayer>>::encode(&image),
+            },
+            86..192 => match args.dither {
+                Dither::Sobol => <BitMergeSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <BitMergeSixelEncoder128>::encode(&image),
+                Dither::Bayer => <BitMergeSixelEncoder128<Bayer>>::encode(&image),
+            },
+            _ => match args.dither {
+                Dither::Sobol => <BitMergeSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <BitMergeSixelEncoder256>::encode(&image),
+                Dither::Bayer => <BitMergeSixelEncoder256<Bayer>>::encode(&image),
+            },
         },
         PaletteFormat::Octree => match args.palette_size {
-            0..3 => {
-                if args.sobol {
-                    <OctreeSixelEncoderMono<Sobol>>::encode(&image)
-                } else {
-                    <OctreeSixelEncoderMono>::encode(&image)
-                }
-            }
-            3..6 => {
-                if args.sobol {
-                    <OctreeSixelEncoder4<Sobol>>::encode(&image)
-                } else {
-                    <OctreeSixelEncoder4>::encode(&image)
-                }
-            }
-            6..12 => {
-                if args.sobol {
-                    <OctreeSixelEncoder8<Sobol>>::encode(&image)
-                } else {
-                    <OctreeSixelEncoder8>::encode(&image)
-                }
-            }
-            12..24 => {
-                if args.sobol {
-                    <OctreeSixelEncoder16<Sobol>>::encode(&image)
-                } else {
-                    <OctreeSixelEncoder16>::encode(&image)
-                }
-            }
-            24..48 => {
-                if args.sobol {
-                    <OctreeSixelEncoder32<Sobol>>::encode(&image)
-                } else {
-                    <OctreeSixelEncoder32>::encode(&image)
-                }
-            }
-            48..86 => {
-                if args.sobol {
-                    <OctreeSixelEncoder64<Sobol>>::encode(&image)
-                } else {
-                    <OctreeSixelEncoder64>::encode(&image)
-                }
-            }
-            86..192 => {
-                if args.sobol {
-                    <OctreeSixelEncoder128<Sobol>>::encode(&image)
-                } else {
-                    <OctreeSixelEncoder128>::encode(&image)
-                }
-            }
-            _ => {
-                if args.sobol {
-                    <OctreeSixelEncoder256<Sobol>>::encode(&image)
-                } else {
-                    <OctreeSixelEncoder256>::encode(&image)
-                }
-            }
+            0..3 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoderMono<Bayer>>::encode(&image),
+            },
+            3..6 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder4>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder4<Bayer>>::encode(&image),
+            },
+            6..12 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder8>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder8<Bayer>>::encode(&image),
+            },
+            12..24 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder16>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder16<Bayer>>::encode(&image),
+            },
+            24..48 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder32>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder32<Bayer>>::encode(&image),
+            },
+            48..86 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder64>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder64<Bayer>>::encode(&image),
+            },
+            86..192 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder128>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder128<Bayer>>::encode(&image),
+            },
+            _ => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder256>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder256<Bayer>>::encode(&image),
+            },
         },
         PaletteFormat::KMeans => match args.palette_size {
-            0..3 => {
-                if args.sobol {
-                    <KMeansSixelEncoderMono<Sobol>>::encode(&image)
-                } else {
-                    <KMeansSixelEncoderMono>::encode(&image)
-                }
-            }
-            3..6 => {
-                if args.sobol {
-                    <KMeansSixelEncoder4<Sobol>>::encode(&image)
-                } else {
-                    <KMeansSixelEncoder4>::encode(&image)
-                }
-            }
-            6..12 => {
-                if args.sobol {
-                    <KMeansSixelEncoder8<Sobol>>::encode(&image)
-                } else {
-                    <KMeansSixelEncoder8>::encode(&image)
-                }
-            }
-            12..24 => {
-                if args.sobol {
-                    <KMeansSixelEncoder16<Sobol>>::encode(&image)
-                } else {
-                    <KMeansSixelEncoder16>::encode(&image)
-                }
-            }
-            24..48 => {
-                if args.sobol {
-                    <KMeansSixelEncoder32<Sobol>>::encode(&image)
-                } else {
-                    <KMeansSixelEncoder32>::encode(&image)
-                }
-            }
-            48..86 => {
-                if args.sobol {
-                    <KMeansSixelEncoder64<Sobol>>::encode(&image)
-                } else {
-                    <KMeansSixelEncoder64>::encode(&image)
-                }
-            }
-            86..192 => {
-                if args.sobol {
-                    <KMeansSixelEncoder128<Sobol>>::encode(&image)
-                } else {
-                    <KMeansSixelEncoder128>::encode(&image)
-                }
-            }
-            _ => {
-                if args.sobol {
-                    <KMeansSixelEncoder256<Sobol>>::encode(&image)
-                } else {
-                    <KMeansSixelEncoder256>::encode(&image)
-                }
-            }
+            0..3 => match args.dither {
+                Dither::Sobol => <KMeansSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <KMeansSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <KMeansSixelEncoderMono<Bayer>>::encode(&image),
+            },
+            3..6 => match args.dither {
+                Dither::Sobol => <KMeansSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <KMeansSixelEncoder4>::encode(&image),
+                Dither::Bayer => <KMeansSixelEncoder4<Bayer>>::encode(&image),
+            },
+            6..12 => match args.dither {
+                Dither::Sobol => <KMeansSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <KMeansSixelEncoder8>::encode(&image),
+                Dither::Bayer => <KMeansSixelEncoder8<Bayer>>::encode(&image),
+            },
+            12..24 => match args.dither {
+                Dither::Sobol => <KMeansSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <KMeansSixelEncoder16>::encode(&image),
+                Dither::Bayer => <KMeansSixelEncoder16<Bayer>>::encode(&image),
+            },
+            24..48 => match args.dither {
+                Dither::Sobol => <KMeansSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <KMeansSixelEncoder32>::encode(&image),
+                Dither::Bayer => <KMeansSixelEncoder32<Bayer>>::encode(&image),
+            },
+            48..86 => match args.dither {
+                Dither::Sobol => <KMeansSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <KMeansSixelEncoder64>::encode(&image),
+                Dither::Bayer => <KMeansSixelEncoder64<Bayer>>::encode(&image),
+            },
+            86..192 => match args.dither {
+                Dither::Sobol => <KMeansSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <KMeansSixelEncoder128>::encode(&image),
+                Dither::Bayer => <KMeansSixelEncoder128<Bayer>>::encode(&image),
+            },
+            _ => match args.dither {
+                Dither::Sobol => <KMeansSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <KMeansSixelEncoder256>::encode(&image),
+                Dither::Bayer => <KMeansSixelEncoder256<Bayer>>::encode(&image),
+            },
         },
         PaletteFormat::KMedians => match args.palette_size {
-            0..3 => {
-                if args.sobol {
-                    <KMediansSixelEncoderMono<Sobol>>::encode(&image)
-                } else {
-                    <KMediansSixelEncoderMono>::encode(&image)
-                }
-            }
-            3..6 => {
-                if args.sobol {
-                    <KMediansSixelEncoder4<Sobol>>::encode(&image)
-                } else {
-                    <KMediansSixelEncoder4>::encode(&image)
-                }
-            }
-            6..12 => {
-                if args.sobol {
-                    <KMediansSixelEncoder8<Sobol>>::encode(&image)
-                } else {
-                    <KMediansSixelEncoder8>::encode(&image)
-                }
-            }
-            12..24 => {
-                if args.sobol {
-                    <KMediansSixelEncoder16<Sobol>>::encode(&image)
-                } else {
-                    <KMediansSixelEncoder16>::encode(&image)
-                }
-            }
-            24..48 => {
-                if args.sobol {
-                    <KMediansSixelEncoder32<Sobol>>::encode(&image)
-                } else {
-                    <KMediansSixelEncoder32>::encode(&image)
-                }
-            }
-            48..86 => {
-                if args.sobol {
-                    <KMediansSixelEncoder64<Sobol>>::encode(&image)
-                } else {
-                    <KMediansSixelEncoder64>::encode(&image)
-                }
-            }
-            86..192 => {
-                if args.sobol {
-                    <KMediansSixelEncoder128<Sobol>>::encode(&image)
-                } else {
-                    <KMediansSixelEncoder128>::encode(&image)
-                }
-            }
-            _ => {
-                if args.sobol {
-                    <KMediansSixelEncoder256<Sobol>>::encode(&image)
-                } else {
-                    <KMediansSixelEncoder256>::encode(&image)
-                }
-            }
+            0..3 => match args.dither {
+                Dither::Sobol => <KMediansSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <KMediansSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <KMediansSixelEncoderMono<Bayer>>::encode(&image),
+            },
+            3..6 => match args.dither {
+                Dither::Sobol => <KMediansSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <KMediansSixelEncoder4>::encode(&image),
+                Dither::Bayer => <KMediansSixelEncoder4<Bayer>>::encode(&image),
+            },
+            6..12 => match args.dither {
+                Dither::Sobol => <KMediansSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <KMediansSixelEncoder8>::encode(&image),
+                Dither::Bayer => <KMediansSixelEncoder8<Bayer>>::encode(&image),
+            },
+            12..24 => match args.dither {
+                Dither::Sobol => <KMediansSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <KMediansSixelEncoder16>::encode(&image),
+                Dither::Bayer => <KMediansSixelEncoder16<Bayer>>::encode(&image),
+            },
+            24..48 => match args.dither {
+                Dither::Sobol => <KMediansSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <KMediansSixelEncoder32>::encode(&image),
+                Dither::Bayer => <KMediansSixelEncoder32<Bayer>>::encode(&image),
+            },
+            48..86 => match args.dither {
+                Dither::Sobol => <KMediansSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <KMediansSixelEncoder64>::encode(&image),
+                Dither::Bayer => <KMediansSixelEncoder64<Bayer>>::encode(&image),
+            },
+            86..192 => match args.dither {
+                Dither::Sobol => <KMediansSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <KMediansSixelEncoder128>::encode(&image),
+                Dither::Bayer => <KMediansSixelEncoder128<Bayer>>::encode(&image),
+            },
+            _ => match args.dither {
+                Dither::Sobol => <KMediansSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <KMediansSixelEncoder256>::encode(&image),
+                Dither::Bayer => <KMediansSixelEncoder256<Bayer>>::encode(&image),
+            },
         },
     };
 

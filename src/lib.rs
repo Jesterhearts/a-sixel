@@ -23,7 +23,7 @@
 //! quality against the test images (speed figures will vary) at 256 colors with
 //! Sierra dithering:
 //!
-//! | Algorithm         |  MSE   | DSSIM  | Execution Time (ms) | Initial Buckets |
+//! | Algorithm         |    MSE | DSSIM  | Execution Time (ms) | Initial Buckets |
 //! | :---------------- | -----: | :----: | ------------------: | --------------: |
 //! | adu               |  15.56 | 0.0054 |                1473 |             N/A |
 //! | bit               |  36.42 | 0.0132 |                 367 |             N/A |

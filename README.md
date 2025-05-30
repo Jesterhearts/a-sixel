@@ -23,19 +23,19 @@ println!("{}", <BitMergeSixelEncoderBest>::encode(&img));
 For a more detailed breakdown, here's the encoders by average speed and quality against the test
 images (speed figures will vary) at 256 colors with Sierra dithering:
 
-| Algorithm         |  MSE   | DSSIM  | Execution Time (ms) | Initial Buckets |
-| :---------------- | :----: | :----: | ------------------: | --------------: |
-| adu               | 15.56  | 0.0054 |                1473 |             N/A |
-| bit               | 36.42  | 0.0132 |                 367 |             N/A |
-| bit-merge-low     | 12.10  | 0.0046 |                 559 |            2^14 |
-| bit-merge         | 10.96  | 0.0040 |                1198 |            2^18 |
-| bit-merge-better  | 10.77  | 0.0039 |                2196 |            2^20 |
-| bit-merge-best    | 10.75  | 0.0039 |                2850 |            2^21 |
-| focal             | 11.72  | 0.0043 |                3253 |            2^21 |
-| k-means           | 10.86  | 0.0040 |                6208 |             N/A |
-| k-medians         | 18.68  | 0.0075 |               10688 |             N/A |
-| median-cut        | 20.27  | 0.0061 |                 627 |             N/A |
-| octree (max-heap) | 66.60  | 0.0163 |                 589 |             N/A |
+| Algorithm         |    MSE | DSSIM  | Execution Time (ms) | Initial Buckets |
+| :---------------- | -----: | :----: | ------------------: | --------------: |
+| adu               |  15.56 | 0.0054 |                1473 |             N/A |
+| bit               |  36.42 | 0.0132 |                 367 |             N/A |
+| bit-merge-low     |  12.10 | 0.0046 |                 559 |            2^14 |
+| bit-merge         |  10.96 | 0.0040 |                1198 |            2^18 |
+| bit-merge-better  |  10.77 | 0.0039 |                2196 |            2^20 |
+| bit-merge-best    |  10.75 | 0.0039 |                2850 |            2^21 |
+| focal             |  11.72 | 0.0043 |                3253 |            2^21 |
+| k-means           |  10.86 | 0.0040 |                6208 |             N/A |
+| k-medians         |  18.68 | 0.0075 |               10688 |             N/A |
+| median-cut        |  20.27 | 0.0061 |                 627 |             N/A |
+| octree (max-heap) |  66.60 | 0.0163 |                 589 |             N/A |
 | octree (min-heap) | 332.29 | 0.0890 |                 552 |             N/A |
 
 
