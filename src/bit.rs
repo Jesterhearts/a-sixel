@@ -2,7 +2,13 @@
 //! buckets. This is very fast and produces ok results for most images at larger
 //! palette sizes (e.g. 256).
 
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    sync::atomic::{
+        AtomicU64,
+        Ordering,
+    },
+};
 
 use dilate::DilateExpand;
 use ordered_float::OrderedFloat;
@@ -11,6 +17,7 @@ use palette::{
     Lab,
     Srgb,
 };
+use rayon::iter::ParallelIterator;
 
 use crate::{
     dither::Sierra,
@@ -28,15 +35,15 @@ pub type BitSixelEncoder64<D = Sierra> = SixelEncoder<BitPaletteBuilder<64>, D>;
 pub type BitSixelEncoder128<D = Sierra> = SixelEncoder<BitPaletteBuilder<128>, D>;
 pub type BitSixelEncoder256<D = Sierra> = SixelEncoder<BitPaletteBuilder<256>, D>;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub(crate) struct Bucket {
-    pub(crate) color: (u64, u64, u64),
-    pub(crate) count: u64,
+    pub(crate) color: (AtomicU64, AtomicU64, AtomicU64),
+    pub(crate) count: AtomicU64,
 }
 
 #[derive(Debug)]
 pub struct BitPaletteBuilder<const PALETTE_SIZE: usize> {
-    pub(crate) buckets: [Bucket; PALETTE_SIZE],
+    pub(crate) buckets: Vec<Bucket>,
 }
 
 impl<const PALETTE_SIZE: usize> BitPaletteBuilder<PALETTE_SIZE> {
@@ -45,32 +52,38 @@ impl<const PALETTE_SIZE: usize> BitPaletteBuilder<PALETTE_SIZE> {
 
     pub(crate) fn new() -> Self {
         BitPaletteBuilder {
-            buckets: [Bucket {
-                color: (0, 0, 0),
-                count: 0,
-            }; PALETTE_SIZE],
+            buckets: Vec::from_iter(
+                std::iter::repeat_with(|| Bucket {
+                    color: (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0)),
+                    count: AtomicU64::new(0),
+                })
+                .take(PALETTE_SIZE),
+            ),
         }
     }
 
-    pub(crate) fn insert(&mut self, color: Srgb<u8>) {
-        let index = {
-            let r = color.red.dilate_expand::<3>().value();
-            let g = color.green.dilate_expand::<3>().value();
-            let b = color.blue.dilate_expand::<3>().value();
+    pub(crate) fn insert(&self, color: Srgb<u8>) {
+        let index = Self::index(color);
+        let node = &self.buckets[index];
+        node.color.0.fetch_add(color.red as u64, Ordering::Relaxed);
+        node.color
+            .1
+            .fetch_add(color.green as u64, Ordering::Relaxed);
+        node.color.2.fetch_add(color.blue as u64, Ordering::Relaxed);
+        node.count.fetch_add(1, Ordering::Relaxed);
+    }
 
-            // Since elements to the right will get shifted off first, we put them in grb
-            // order (order of most-least significant for luminance). This probably doesn't
-            // make a huge difference, but the theory is nice.
-            let rgb = g << 2 | r << 1 | b;
+    pub(crate) fn index(color: Srgb<u8>) -> usize {
+        let r = color.red.dilate_expand::<3>().value();
+        let g = color.green.dilate_expand::<3>().value();
+        let b = color.blue.dilate_expand::<3>().value();
 
-            (rgb >> Self::SHIFT) as usize
-        };
+        // Since elements to the right will get shifted off first, we put them in grb
+        // order (order of most-least significant for luminance). This probably doesn't
+        // make a huge difference, but the theory is nice.
+        let rgb = g << 2 | r << 1 | b;
 
-        let node = &mut self.buckets[index];
-        node.color.0 += color.red as u64;
-        node.color.1 += color.green as u64;
-        node.color.2 += color.blue as u64;
-        node.count += 1;
+        (rgb >> Self::SHIFT) as usize
     }
 }
 
@@ -80,21 +93,24 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for BitPaletteBuilder<PALETTE_SIZ
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
     fn build_palette(image: &image::RgbImage) -> Vec<Lab> {
-        let mut builder = Self::new();
+        let builder = Self::new();
 
-        for pixel in image.pixels() {
+        image.par_pixels().for_each(|pixel| {
             builder.insert(Srgb::<u8>::new(pixel[0], pixel[1], pixel[2]));
-        }
+        });
 
         builder
             .buckets
             .into_iter()
-            .filter(|node| node.count > 0)
+            .filter(|node| node.count.load(Ordering::Relaxed) > 0)
             .map(|node| {
                 let rgb = Srgb::new(
-                    (node.color.0 / node.count) as u8,
-                    (node.color.1 / node.count) as u8,
-                    (node.color.2 / node.count) as u8,
+                    (node.color.0.load(Ordering::Relaxed) / node.count.load(Ordering::Relaxed))
+                        as u8,
+                    (node.color.1.load(Ordering::Relaxed) / node.count.load(Ordering::Relaxed))
+                        as u8,
+                    (node.color.2.load(Ordering::Relaxed) / node.count.load(Ordering::Relaxed))
+                        as u8,
                 );
                 let lab: Lab = rgb.into_format().into_color();
                 [

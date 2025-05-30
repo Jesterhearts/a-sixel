@@ -1,5 +1,4 @@
-//! Uses k-medians to build a palette of colors. K-medians produces better
-//! results than k-means, but is substantially slower.
+//! Uses k-medians to build a palette of colors.
 
 use std::{
     array,

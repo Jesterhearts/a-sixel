@@ -1,5 +1,5 @@
 //! Use weighted pixels based on the image's spectral properties to provided
-//! weighted input to k-medians.
+//! weighted input to k-means.
 //!
 //! Weights are computed using the following steps:
 //! 1. Compute the saliency maps for each channel (L, a, b) using a combination
@@ -24,8 +24,12 @@
 //!    the phase spectrum, a is the amplitude spectrum, and ld is the local
 //!    distance.
 
-use std::f32::consts::PI;
+use std::{
+    f32::consts::PI,
+    sync::atomic::Ordering,
+};
 
+use atomic_float::AtomicF32;
 use image::{
     Rgb,
     RgbImage,
@@ -39,7 +43,9 @@ use libblur::{
 };
 use palette::{
     color_difference::EuclideanDistance,
+    IntoColor,
     Lab,
+    Srgb,
 };
 use rayon::{
     iter::{
@@ -61,10 +67,12 @@ use rustfft::{
 };
 
 use crate::{
+    bitmerge::agglomerative_merge,
     dither::Sierra,
     kmeans::parallel_kmeans,
     private,
     rgb_to_lab,
+    BitPaletteBuilder,
     PaletteBuilder,
     SixelEncoder,
 };
@@ -459,7 +467,50 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             dump_intermediate("candidates", &quant_candidates, image_width, image_height);
         }
 
-        parallel_kmeans::<PALETTE_SIZE>(&candidates)
+        let buckets = Vec::from_iter(
+            std::iter::repeat_with(|| {
+                (
+                    (
+                        AtomicF32::new(0.0),
+                        AtomicF32::new(0.0),
+                        AtomicF32::new(0.0),
+                    ),
+                    AtomicF32::new(0.0),
+                )
+            })
+            .take(1 << 21),
+        );
+
+        candidates.par_iter().for_each(|(c, w)| {
+            let rgb: Srgb = (*c).into_color();
+            let index = BitPaletteBuilder::<{ 1 << 21 }>::index(rgb.into_format());
+            let bucket = &buckets[index];
+            bucket.0 .0.fetch_add(c.l * *w, Ordering::Relaxed);
+            bucket.0 .1.fetch_add(c.a * *w, Ordering::Relaxed);
+            bucket.0 .2.fetch_add(c.b * *w, Ordering::Relaxed);
+            bucket.1.fetch_add(*w, Ordering::Relaxed);
+        });
+
+        let candidates = buckets
+            .into_par_iter()
+            .filter_map(|bucket| {
+                let count = bucket.1.load(Ordering::Relaxed);
+                if count > 0.0 {
+                    let lab = <Lab>::new(
+                        bucket.0 .0.load(Ordering::Relaxed) / count,
+                        bucket.0 .1.load(Ordering::Relaxed) / count,
+                        bucket.0 .2.load(Ordering::Relaxed) / count,
+                    );
+                    Some((lab, count))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let (mut stage2_colors, mut stage2_counts) = parallel_kmeans::<512>(&candidates);
+
+        agglomerative_merge::<512, PALETTE_SIZE>(&mut stage2_colors, &mut stage2_counts)
     }
 }
 

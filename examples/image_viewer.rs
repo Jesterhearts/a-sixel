@@ -33,7 +33,6 @@ use a_sixel::{
     },
     dither::{
         NoDither,
-        Sierra,
         Sobol,
     },
     focal::{
@@ -138,6 +137,17 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let image_path = args.image_path;
+
+    println!(
+        "Loading image: {}",
+        std::path::Path::new(&image_path)
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+    );
+    println!("algorithm: {}", args.palette_format);
+
+    let timer = std::time::Instant::now();
 
     let image = image::load_from_memory(&read(image_path)?)?;
     let image = image.to_rgb8();
@@ -475,7 +485,7 @@ fn main() -> anyhow::Result<()> {
                 if args.sobol {
                     <OctreeSixelEncoder16<Sobol>>::encode(&image)
                 } else {
-                    OctreeSixelEncoder16::<Sierra, true>::encode(&image)
+                    <OctreeSixelEncoder16>::encode(&image)
                 }
             }
             24..48 => {
@@ -624,6 +634,8 @@ fn main() -> anyhow::Result<()> {
             }
         },
     };
+
+    println!("Time taken: {}ms", timer.elapsed().as_millis());
 
     println!("{six}");
 

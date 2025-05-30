@@ -2,7 +2,6 @@
 
 use std::{
     array,
-    collections::HashSet,
     sync::atomic::Ordering,
 };
 
@@ -58,12 +57,14 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for KMeansPaletteBuilder<PALETTE_
             .map(|c| (c, 1.0))
             .collect::<Vec<_>>();
 
-        parallel_kmeans::<PALETTE_SIZE>(&candidates)
+        parallel_kmeans::<PALETTE_SIZE>(&candidates).0
     }
 }
 
-pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(candidates: &[(Lab, f32)]) -> Vec<Lab> {
-    let mut centroids = KdTree::<_, _, 3, 257, u32>::with_capacity(PALETTE_SIZE);
+pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(
+    candidates: &[(Lab, f32)],
+) -> (Vec<Lab>, Vec<f32>) {
+    let mut centroids = KdTree::<_, _, 3, 1025, u32>::with_capacity(PALETTE_SIZE);
 
     let (center, weight) = candidates.par_iter().copied().reduce(
         || (<Lab>::new(0.0, 0.0, 0.0), 0.0),
@@ -146,7 +147,7 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(candidates: &[(Lab, f32
         });
 
     for _ in 0..100 {
-        centroids = KdTree::<_, _, 3, 257, u32>::with_capacity(PALETTE_SIZE);
+        centroids = KdTree::<_, _, 3, 1025, u32>::with_capacity(PALETTE_SIZE);
 
         for (cidx, (mean, count)) in cluster_means.iter().enumerate() {
             centroids.add(
@@ -197,17 +198,13 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(candidates: &[(Lab, f32
         }
     }
 
-    centroids
+    cluster_means
         .iter()
-        .map(|(_, centroid)| {
-            [
-                OrderedFloat(centroid[0]),
-                OrderedFloat(centroid[1]),
-                OrderedFloat(centroid[2]),
-            ]
+        .map(|(mean, count)| {
+            let l = mean[0].load(Ordering::Relaxed) / count.load(Ordering::Relaxed);
+            let a = mean[1].load(Ordering::Relaxed) / count.load(Ordering::Relaxed);
+            let b = mean[2].load(Ordering::Relaxed) / count.load(Ordering::Relaxed);
+            (Lab::new(l, a, b), count.load(Ordering::Relaxed))
         })
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .map(|[l, a, b]| Lab::new(*l, *a, *b))
-        .collect()
+        .unzip()
 }
