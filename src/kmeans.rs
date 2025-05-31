@@ -14,11 +14,12 @@ use kiddo::{
 use ordered_float::OrderedFloat;
 use palette::{
     color_difference::EuclideanDistance,
+    IntoColor,
     Lab,
+    Srgb,
 };
 use rayon::iter::{
     IndexedParallelIterator,
-    IntoParallelIterator,
     IntoParallelRefIterator,
     ParallelIterator,
 };
@@ -27,6 +28,7 @@ use crate::{
     dither::Sierra,
     private,
     rgb_to_lab,
+    BitPaletteBuilder,
     PaletteBuilder,
     SixelEncoder,
 };
@@ -66,48 +68,100 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(
 ) -> (Vec<Lab>, Vec<f32>) {
     let mut centroids = KdTree::<_, _, 3, 1025, u32>::with_capacity(PALETTE_SIZE);
 
-    let (center, weight) = candidates.par_iter().copied().reduce(
-        || (<Lab>::new(0.0, 0.0, 0.0), 0.0),
-        |mut acc, color| {
-            acc.0.l += color.0.l;
-            acc.0.a += color.0.a;
-            acc.0.b += color.0.b;
+    const BUCKETS: usize = 1 << 14;
+    let buckets = Vec::from_iter(
+        std::iter::repeat_with(|| {
+            (
+                [
+                    AtomicF32::new(0.0),
+                    AtomicF32::new(0.0),
+                    AtomicF32::new(0.0),
+                ],
+                AtomicF32::new(0.0),
+            )
+        })
+        .take(BUCKETS),
+    );
+    candidates.par_iter().copied().for_each(|(color, w)| {
+        let color: Srgb = color.into_color();
+        let index = BitPaletteBuilder::<BUCKETS>::index(color.into_format());
+        buckets[index].0[0].fetch_add(color.red as f32 * w, Ordering::Relaxed);
+        buckets[index].0[1].fetch_add(color.green as f32 * w, Ordering::Relaxed);
+        buckets[index].0[2].fetch_add(color.blue as f32 * w, Ordering::Relaxed);
+        buckets[index].1.fetch_add(w, Ordering::Relaxed);
+    });
+
+    let (centroid, count) = buckets
+        .iter()
+        .filter_map(|bucket| {
+            let count = bucket.1.load(Ordering::Relaxed);
+            if count > 0.0 {
+                let rgb = Srgb::new(
+                    bucket.0[0].load(Ordering::Relaxed),
+                    bucket.0[1].load(Ordering::Relaxed),
+                    bucket.0[2].load(Ordering::Relaxed),
+                );
+                let lab: Lab = rgb.into_color();
+                Some((lab, count))
+            } else {
+                None
+            }
+        })
+        .fold((<Lab>::new(0.0, 0.0, 0.0), 0.0), |mut acc, color| {
+            acc.0 += color.0;
             acc.1 += color.1;
             acc
-        },
-    );
-    let center = center / weight;
+        });
+    let centroid = centroid / count;
 
-    let (idx_furthest, _) = (0..candidates.len())
-        .into_par_iter()
-        .map(|idx| {
-            let (color, _) = candidates[idx];
-            let distance = color.distance_squared(center);
-            (idx, distance)
+    let init = buckets
+        .iter()
+        .max_by_key(|bucket| {
+            let count = bucket.1.load(Ordering::Relaxed);
+            let rgb = Srgb::new(
+                bucket.0[0].load(Ordering::Relaxed) / count,
+                bucket.0[1].load(Ordering::Relaxed) / count,
+                bucket.0[2].load(Ordering::Relaxed) / count,
+            );
+            let lab: Lab = rgb.into_color();
+            let dist = centroid.distance_squared(lab);
+            OrderedFloat(dist * count)
         })
-        .max_by_key(|(_, sum)| OrderedFloat(*sum))
         .unwrap();
-
-    centroids.add(
-        &[
-            candidates[idx_furthest].0.l,
-            candidates[idx_furthest].0.a,
-            candidates[idx_furthest].0.b,
-        ],
-        0,
+    let count = init.1.load(Ordering::Relaxed);
+    let rgb = Srgb::new(
+        init.0[0].load(Ordering::Relaxed) / count,
+        init.0[1].load(Ordering::Relaxed) / count,
+        init.0[2].load(Ordering::Relaxed) / count,
     );
+    let lab: Lab = rgb.into_color();
+    centroids.add(&[lab.l, lab.a, lab.b], 0);
 
-    for cidx in 1..PALETTE_SIZE {
-        let (furthest, _) = candidates
+    for idx in 1..PALETTE_SIZE {
+        let maximin = buckets
             .par_iter()
-            .copied()
-            .max_by_key(|(c, _)| {
-                let nearest = centroids.nearest_one::<SquaredEuclidean>(&[c.l, c.a, c.b]);
-                OrderedFloat(nearest.distance)
+            .max_by_key(|bucket| {
+                let count = bucket.1.load(Ordering::Relaxed);
+                let rgb = Srgb::new(
+                    bucket.0[0].load(Ordering::Relaxed) / count,
+                    bucket.0[1].load(Ordering::Relaxed) / count,
+                    bucket.0[2].load(Ordering::Relaxed) / count,
+                );
+                let lab: Lab = rgb.into_color();
+                let min = centroids
+                    .nearest_one::<SquaredEuclidean>(&[lab.l, lab.a, lab.b])
+                    .distance;
+                OrderedFloat(min * count)
             })
             .unwrap();
-
-        centroids.add(&[furthest.l, furthest.a, furthest.b], cidx as u32);
+        let count = maximin.1.load(Ordering::Relaxed);
+        let rgb = Srgb::new(
+            maximin.0[0].load(Ordering::Relaxed) / count,
+            maximin.0[1].load(Ordering::Relaxed) / count,
+            maximin.0[2].load(Ordering::Relaxed) / count,
+        );
+        let mean: Lab = rgb.into_color();
+        centroids.add(&[mean.l, mean.a, mean.b], idx as u32);
     }
 
     let mut cluster_assignments = vec![0; candidates.len()];
