@@ -1,16 +1,83 @@
 use std::fs::read;
 
+#[cfg(feature = "adu")]
+use a_sixel::adu::{
+    ADUSixelEncoder128,
+    ADUSixelEncoder16,
+    ADUSixelEncoder256,
+    ADUSixelEncoder32,
+    ADUSixelEncoder4,
+    ADUSixelEncoder64,
+    ADUSixelEncoder8,
+    ADUSixelEncoderMono,
+};
+#[cfg(feature = "bit-merge")]
+use a_sixel::bitmerge::{
+    BitMergeSixelEncoder128,
+    BitMergeSixelEncoder16,
+    BitMergeSixelEncoder256,
+    BitMergeSixelEncoder32,
+    BitMergeSixelEncoder4,
+    BitMergeSixelEncoder64,
+    BitMergeSixelEncoder8,
+    BitMergeSixelEncoderMono,
+};
+#[cfg(feature = "focal")]
+use a_sixel::focal::{
+    FocalSixelEncoder128,
+    FocalSixelEncoder16,
+    FocalSixelEncoder256,
+    FocalSixelEncoder32,
+    FocalSixelEncoder4,
+    FocalSixelEncoder64,
+    FocalSixelEncoder8,
+    FocalSixelEncoderMono,
+};
+#[cfg(feature = "k-means")]
+use a_sixel::kmeans::{
+    KMeansSixelEncoder128,
+    KMeansSixelEncoder16,
+    KMeansSixelEncoder256,
+    KMeansSixelEncoder32,
+    KMeansSixelEncoder4,
+    KMeansSixelEncoder64,
+    KMeansSixelEncoder8,
+    KMeansSixelEncoderMono,
+};
+#[cfg(feature = "k-medians")]
+use a_sixel::kmedians::{
+    KMediansSixelEncoder128,
+    KMediansSixelEncoder16,
+    KMediansSixelEncoder256,
+    KMediansSixelEncoder32,
+    KMediansSixelEncoder4,
+    KMediansSixelEncoder64,
+    KMediansSixelEncoder8,
+    KMediansSixelEncoderMono,
+};
+#[cfg(feature = "median-cut")]
+use a_sixel::median_cut::{
+    MedianCutSixelEncoder128,
+    MedianCutSixelEncoder16,
+    MedianCutSixelEncoder256,
+    MedianCutSixelEncoder32,
+    MedianCutSixelEncoder4,
+    MedianCutSixelEncoder64,
+    MedianCutSixelEncoder8,
+    MedianCutSixelEncoderMono,
+};
+#[cfg(feature = "octree")]
+use a_sixel::octree::{
+    OctreeSixelEncoder128,
+    OctreeSixelEncoder16,
+    OctreeSixelEncoder256,
+    OctreeSixelEncoder32,
+    OctreeSixelEncoder4,
+    OctreeSixelEncoder64,
+    OctreeSixelEncoder8,
+    OctreeSixelEncoderMono,
+};
 use a_sixel::{
-    adu::{
-        ADUSixelEncoder128,
-        ADUSixelEncoder16,
-        ADUSixelEncoder256,
-        ADUSixelEncoder32,
-        ADUSixelEncoder4,
-        ADUSixelEncoder64,
-        ADUSixelEncoder8,
-        ADUSixelEncoderMono,
-    },
     bit::{
         BitSixelEncoder128,
         BitSixelEncoder16,
@@ -21,69 +88,9 @@ use a_sixel::{
         BitSixelEncoder8,
         BitSixelEncoderMono,
     },
-    bitmerge::{
-        BitMergeSixelEncoder128,
-        BitMergeSixelEncoder16,
-        BitMergeSixelEncoder256,
-        BitMergeSixelEncoder32,
-        BitMergeSixelEncoder4,
-        BitMergeSixelEncoder64,
-        BitMergeSixelEncoder8,
-        BitMergeSixelEncoderMono,
-    },
     dither::{
         Bayer,
         Sobol,
-    },
-    focal::{
-        FocalSixelEncoder128,
-        FocalSixelEncoder16,
-        FocalSixelEncoder256,
-        FocalSixelEncoder32,
-        FocalSixelEncoder4,
-        FocalSixelEncoder64,
-        FocalSixelEncoder8,
-        FocalSixelEncoderMono,
-    },
-    kmeans::{
-        KMeansSixelEncoder128,
-        KMeansSixelEncoder16,
-        KMeansSixelEncoder256,
-        KMeansSixelEncoder32,
-        KMeansSixelEncoder4,
-        KMeansSixelEncoder64,
-        KMeansSixelEncoder8,
-        KMeansSixelEncoderMono,
-    },
-    kmedians::{
-        KMediansSixelEncoder128,
-        KMediansSixelEncoder16,
-        KMediansSixelEncoder256,
-        KMediansSixelEncoder32,
-        KMediansSixelEncoder4,
-        KMediansSixelEncoder64,
-        KMediansSixelEncoder8,
-        KMediansSixelEncoderMono,
-    },
-    median_cut::{
-        MedianCutSixelEncoder128,
-        MedianCutSixelEncoder16,
-        MedianCutSixelEncoder256,
-        MedianCutSixelEncoder32,
-        MedianCutSixelEncoder4,
-        MedianCutSixelEncoder64,
-        MedianCutSixelEncoder8,
-        MedianCutSixelEncoderMono,
-    },
-    octree::{
-        OctreeSixelEncoder128,
-        OctreeSixelEncoder16,
-        OctreeSixelEncoder256,
-        OctreeSixelEncoder32,
-        OctreeSixelEncoder4,
-        OctreeSixelEncoder64,
-        OctreeSixelEncoder8,
-        OctreeSixelEncoderMono,
     },
 };
 use clap::Parser;
@@ -95,14 +102,21 @@ use strum::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display)]
 #[strum(ascii_case_insensitive, serialize_all = "kebab-case")]
 enum PaletteFormat {
+    #[cfg(feature = "adu")]
     Adu,
+    #[cfg(feature = "focal")]
     Focal,
+    #[cfg(feature = "median-cut")]
     MedianCut,
     Bit,
+    #[cfg(feature = "bit-merge")]
     BitMerge,
+    #[cfg(feature = "octree")]
     Octree,
+    #[cfg(feature = "k-means")]
     #[strum(serialize = "kmeans", serialize = "k-means")]
     KMeans,
+    #[cfg(feature = "k-medians")]
     #[strum(
         serialize = "kmedians",
         serialize = "kmed",
@@ -132,7 +146,7 @@ struct Args {
     palette_size: usize,
 
     /// The palette generator to use.
-    #[clap(long, short = 'f', default_value_t = PaletteFormat::Focal)]
+    #[clap(long, short = 'f', default_value_t = PaletteFormat::Bit)]
     palette_format: PaletteFormat,
 
     /// Whether to use Sobol dithering instead of the default dithering.
@@ -159,6 +173,7 @@ fn main() -> anyhow::Result<()> {
     let image = image.to_rgb8();
 
     let six = match args.palette_format {
+        #[cfg(feature = "adu")]
         PaletteFormat::Adu => match args.palette_size {
             0..3 => match args.dither {
                 Dither::Sobol => <ADUSixelEncoderMono<Sobol>>::encode(&image),
@@ -201,6 +216,7 @@ fn main() -> anyhow::Result<()> {
                 Dither::Bayer => <ADUSixelEncoder256<Bayer>>::encode(&image),
             },
         },
+        #[cfg(feature = "focal")]
         PaletteFormat::Focal => match args.palette_size {
             0..3 => match args.dither {
                 Dither::Sobol => <FocalSixelEncoderMono<Sobol>>::encode(&image),
@@ -243,6 +259,7 @@ fn main() -> anyhow::Result<()> {
                 Dither::Bayer => <FocalSixelEncoder256<Bayer>>::encode(&image),
             },
         },
+        #[cfg(feature = "median-cut")]
         PaletteFormat::MedianCut => match args.palette_size {
             0..3 => match args.dither {
                 Dither::Sobol => <MedianCutSixelEncoderMono<Sobol>>::encode(&image),
@@ -327,6 +344,7 @@ fn main() -> anyhow::Result<()> {
                 Dither::Bayer => <BitSixelEncoder256<Bayer>>::encode(&image),
             },
         },
+        #[cfg(feature = "bit-merge")]
         PaletteFormat::BitMerge => match args.palette_size {
             0..3 => match args.dither {
                 Dither::Sobol => <BitMergeSixelEncoderMono<Sobol>>::encode(&image),
@@ -369,6 +387,7 @@ fn main() -> anyhow::Result<()> {
                 Dither::Bayer => <BitMergeSixelEncoder256<Bayer>>::encode(&image),
             },
         },
+        #[cfg(feature = "octree")]
         PaletteFormat::Octree => match args.palette_size {
             0..3 => match args.dither {
                 Dither::Sobol => <OctreeSixelEncoderMono<Sobol>>::encode(&image),
@@ -411,6 +430,7 @@ fn main() -> anyhow::Result<()> {
                 Dither::Bayer => <OctreeSixelEncoder256<Bayer>>::encode(&image),
             },
         },
+        #[cfg(feature = "k-means")]
         PaletteFormat::KMeans => match args.palette_size {
             0..3 => match args.dither {
                 Dither::Sobol => <KMeansSixelEncoderMono<Sobol>>::encode(&image),
@@ -453,6 +473,7 @@ fn main() -> anyhow::Result<()> {
                 Dither::Bayer => <KMeansSixelEncoder256<Bayer>>::encode(&image),
             },
         },
+        #[cfg(feature = "k-medians")]
         PaletteFormat::KMedians => match args.palette_size {
             0..3 => match args.dither {
                 Dither::Sobol => <KMediansSixelEncoderMono<Sobol>>::encode(&image),

@@ -1,6 +1,6 @@
 [package]
 name        = "a-sixel"
-version     = "0.3.0"
+version     = "0.4.0"
 edition     = "2021"
 license     = "MIT OR Apache-2.0"
 description = "A small sixel + palette selection + dithering library. "
@@ -10,7 +10,14 @@ repository  = "https://github.com/Jesterhearts/a-sixel"
 exclude     = [ "test_images" ]
 
 [features]
-default = [  ]
+default    = [ "adu", "bit-merge", "focal", "k-means", "k-medians", "median-cut", "octree" ]
+adu        = [  ]
+bit-merge  = [ "k-means" ]
+focal      = [ "k-means", "dep:libblur", "dep:rustfft" ]
+k-means    = [  ]
+k-medians  = [  ]
+median-cut = [  ]
+octree     = [  ]
 # For debugging -- maps the saliency scores used to determine color weights to a greyscale image and dumps each map to a file.
 dump_saliency       = [ "dump_l_saliency", "dump_a_saliency", "dump_b_saliency", "dump_local_saliency", "dump_weights" ]
 dump_l_saliency     = [  ]
@@ -32,12 +39,12 @@ dilate        = "0.6.3"
 dssim-core    = { version = "3.2.11", optional = true }
 image         = { version = "0.25.6", default-features = false, features = [ "rayon" ] }
 kiddo         = "5.0.3"
-libblur       = "0.18.0"
+libblur       = { version = "0.18.0", optional = true }
 ordered-float = "5.0.0"
 palette       = { version = "0.7.6", default-features = false, features = [ "std" ] }
 rayon         = "1.10.0"
 rgb           = { version = "0.8.50", optional = true }
-rustfft       = "6.3.0"
+rustfft       = { version = "6.3.0", optional = true }
 sobol_burley  = "0.5.0"
 
 [dev-dependencies]

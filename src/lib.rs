@@ -52,14 +52,21 @@
 //! | octree (max-heap) | 546.05 | 0.0922 |                 341 |             N/A |
 //! | octree (min-heap) | 879.79 | 0.2536 |                 349 |             N/A |
 
+#[cfg(feature = "adu")]
 pub mod adu;
 pub mod bit;
+#[cfg(feature = "bit-merge")]
 pub mod bitmerge;
 pub mod dither;
+#[cfg(feature = "focal")]
 pub mod focal;
+#[cfg(feature = "k-means")]
 pub mod kmeans;
+#[cfg(feature = "k-medians")]
 pub mod kmedians;
+#[cfg(feature = "median-cut")]
 pub mod median_cut;
+#[cfg(feature = "octree")]
 pub mod octree;
 
 use std::{
@@ -89,29 +96,41 @@ use rayon::{
     slice::ParallelSlice,
 };
 
-pub use crate::{
-    adu::ADUPaletteBuilder,
-    bit::BitPaletteBuilder,
-    bitmerge::BitMergePaletteBuilder,
-    focal::FocalPaletteBuilder,
-    kmeans::KMeansPaletteBuilder,
-    kmedians::KMediansPaletteBuilder,
-    median_cut::MedianCutPaletteBuilder,
-    octree::OctreePaletteBuilder,
-};
+#[cfg(feature = "adu")]
+pub use crate::adu::ADUPaletteBuilder;
+#[cfg(feature = "adu")]
+use crate::adu::ADUSixelEncoder256;
+pub use crate::bit::BitPaletteBuilder;
+#[cfg(feature = "bit-merge")]
+pub use crate::bitmerge::BitMergePaletteBuilder;
+#[cfg(feature = "bit-merge")]
+use crate::bitmerge::BitMergeSixelEncoder256;
+#[cfg(feature = "focal")]
+pub use crate::focal::FocalPaletteBuilder;
+#[cfg(feature = "focal")]
+use crate::focal::FocalSixelEncoder256;
+#[cfg(feature = "k-means")]
+pub use crate::kmeans::KMeansPaletteBuilder;
+#[cfg(feature = "k-means")]
+use crate::kmeans::KMeansSixelEncoder256;
+#[cfg(feature = "k-medians")]
+pub use crate::kmedians::KMediansPaletteBuilder;
+#[cfg(feature = "k-medians")]
+use crate::kmedians::KMediansSixelEncoder256;
+#[cfg(feature = "median-cut")]
+pub use crate::median_cut::MedianCutPaletteBuilder;
+#[cfg(feature = "median-cut")]
+use crate::median_cut::MedianCutSixelEncoder256;
+#[cfg(feature = "octree")]
+pub use crate::octree::OctreePaletteBuilder;
+#[cfg(feature = "octree")]
+use crate::octree::OctreeSixelEncoder256;
 use crate::{
-    adu::ADUSixelEncoder256,
     bit::BitSixelEncoder256,
-    bitmerge::BitMergeSixelEncoder256,
     dither::{
         Dither,
         Sierra,
     },
-    focal::FocalSixelEncoder256,
-    kmeans::KMeansSixelEncoder256,
-    kmedians::KMediansSixelEncoder256,
-    median_cut::MedianCutSixelEncoder256,
-    octree::OctreeSixelEncoder256,
 };
 
 struct SixelRow<'c> {
@@ -205,21 +224,31 @@ const fn num2six(num: u8) -> char {
 /// - [`Sierra`] is a good default choice for dithering, as it produces
 ///   high-quality results with minimal artifacts.
 /// - [`NoDither`](dither::NoDither) can be used if performance is a concern.
-pub struct SixelEncoder<P: PaletteBuilder = FocalPaletteBuilder<256>, D: Dither = Sierra> {
+pub struct SixelEncoder<P: PaletteBuilder = BitPaletteBuilder<256>, D: Dither = Sierra> {
     _p: std::marker::PhantomData<P>,
     _d: std::marker::PhantomData<D>,
 }
 
+#[cfg(feature = "adu")]
 pub type ADUSixelEncoder<D = Sierra> = ADUSixelEncoder256<D>;
+#[cfg(feature = "bit-merge")]
 pub type BitMergeSixelEncoderLow<D = Sierra> = BitMergeSixelEncoder256<D, { 1 << 14 }>;
+#[cfg(feature = "bit-merge")]
 pub type BitMergeSixelEncoder<D = Sierra> = BitMergeSixelEncoder256<D>;
+#[cfg(feature = "bit-merge")]
 pub type BitMergeSixelEncoderBetter<D = Sierra> = BitMergeSixelEncoder256<D, { 1 << 20 }>;
+#[cfg(feature = "bit-merge")]
 pub type BitMergeSixelEncoderBest<D = Sierra> = BitMergeSixelEncoder256<D, { 1 << 21 }>;
 pub type BitSixelEncoder<D = Sierra> = BitSixelEncoder256<D>;
+#[cfg(feature = "focal")]
 pub type FocalSixelEncoder<D = Sierra> = FocalSixelEncoder256<D>;
+#[cfg(feature = "k-means")]
 pub type KMeansSixelEncoder<D = Sierra> = KMeansSixelEncoder256<D>;
+#[cfg(feature = "k-medians")]
 pub type KMediansSixelEncoder<D = Sierra> = KMediansSixelEncoder256<D>;
+#[cfg(feature = "median-cut")]
 pub type MedianCutSixelEncoder<D = Sierra> = MedianCutSixelEncoder256<D>;
+#[cfg(feature = "octree")]
 pub type OctreeSixelEncoder<D = Sierra, const USE_MIN_HEAP: bool = false> =
     OctreeSixelEncoder256<D, USE_MIN_HEAP>;
 
