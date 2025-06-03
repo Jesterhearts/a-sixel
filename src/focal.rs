@@ -1177,31 +1177,16 @@ pub(crate) fn o_means<const PALETTE_SIZE: usize>(mut candidates: Vec<(Lab, f32)>
                     let nearest =
                         centroids.nearest_one::<SquaredEuclidean>(&[color.l, color.a, color.b]);
 
-                    if nearest.distance > sigma {
-                        if *slot == -1 {
-                            return false;
-                        }
-                        let old_slot = *slot;
-                        *slot = -1;
+                    let old_slot = *slot;
+                    *slot = if nearest.distance > sigma {
+                        -1
+                    } else {
+                        nearest.item as i64
+                    };
 
-                        cluster_means[old_slot as usize].0[0]
-                            .fetch_sub(color.l * w, Ordering::Relaxed);
-                        cluster_means[old_slot as usize].0[1]
-                            .fetch_sub(color.a * w, Ordering::Relaxed);
-                        cluster_means[old_slot as usize].0[2]
-                            .fetch_sub(color.b * w, Ordering::Relaxed);
-                        cluster_means[old_slot as usize]
-                            .1
-                            .fetch_sub(w, Ordering::Relaxed);
-                        return true;
-                    }
-
-                    if *slot == nearest.item as i64 {
+                    if old_slot == *slot {
                         return false;
                     }
-
-                    let old_slot = *slot;
-                    *slot = nearest.item as i64;
 
                     if old_slot >= 0 {
                         cluster_means[old_slot as usize].0[0]
@@ -1215,15 +1200,17 @@ pub(crate) fn o_means<const PALETTE_SIZE: usize>(mut candidates: Vec<(Lab, f32)>
                             .fetch_sub(w, Ordering::Relaxed);
                     }
 
-                    cluster_means[nearest.item as usize].0[0]
-                        .fetch_add(color.l * w, Ordering::Relaxed);
-                    cluster_means[nearest.item as usize].0[1]
-                        .fetch_add(color.a * w, Ordering::Relaxed);
-                    cluster_means[nearest.item as usize].0[2]
-                        .fetch_add(color.b * w, Ordering::Relaxed);
-                    cluster_means[nearest.item as usize]
-                        .1
-                        .fetch_add(w, Ordering::Relaxed);
+                    if *slot >= 0 {
+                        cluster_means[nearest.item as usize].0[0]
+                            .fetch_add(color.l * w, Ordering::Relaxed);
+                        cluster_means[nearest.item as usize].0[1]
+                            .fetch_add(color.a * w, Ordering::Relaxed);
+                        cluster_means[nearest.item as usize].0[2]
+                            .fetch_add(color.b * w, Ordering::Relaxed);
+                        cluster_means[nearest.item as usize]
+                            .1
+                            .fetch_add(w, Ordering::Relaxed);
+                    }
 
                     true
                 })

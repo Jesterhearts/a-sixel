@@ -56,7 +56,7 @@ This doesn't tell the full story, as sometimes a low MSE or DSSIM can be achieve
 highlight colors in the image. Take `flowers.png` for example:
 
 <details> <summary>Flowers Base</summary>
-<img src="./test_images/flowers.png" />
+<img src="test_images/flowers.png" />
 </details>
 
 <details> <summary>Flowers K-Means 16 Colors</summary>
@@ -65,7 +65,7 @@ MSE: 3.23, DSSIM: 0.0020
 This preserves the grey shades that make up the image well, but completely loses the blue of the
 flowers at the base of the trees.
 
-<img src="./example_images/flowers-k-means-16.png" />
+<img src="example_images/flowers-k-means-16.png" />
 </details>
 
 <details> <summary>Flowers Focal 16 Colors</summary>
@@ -73,7 +73,7 @@ MSE: 9.15, DSSIM: 0.0091
 
 This sacrifices some differentiation between shades of grey, but preserves the blue of the flowers.
 
-<img src="./example_images/flowers-focal-16.png" />
+<img src="example_images/flowers-focal-16.png" />
 </details>
 
 License: MIT OR Apache-2.0
