@@ -24,11 +24,20 @@
 //!    the phase spectrum, a is the amplitude spectrum, and ld is the local
 //!    distance.
 
-use std::f32::consts::PI;
+use std::{
+    array,
+    f32::consts::PI,
+    sync::atomic::Ordering,
+};
 
+use atomic_float::AtomicF32;
 use image::{
     Rgb,
     RgbImage,
+};
+use kiddo::{
+    float::kdtree::KdTree,
+    SquaredEuclidean,
 };
 use libblur::{
     stack_blur_f32,
@@ -39,7 +48,9 @@ use libblur::{
 };
 use palette::{
     color_difference::EuclideanDistance,
+    IntoColor,
     Lab,
+    Srgb,
 };
 use rayon::{
     iter::{
@@ -65,6 +76,7 @@ use crate::{
     kmeans::parallel_kmeans,
     private,
     rgb_to_lab,
+    BitPaletteBuilder,
     PaletteBuilder,
     SixelEncoder,
 };
@@ -332,10 +344,26 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             );
         }
 
-        let max_dist = ((<Lab>::max_l() - <Lab>::min_l()).powi(2)
-            + (<Lab>::max_a() - <Lab>::min_a()).powi(2)
-            + (<Lab>::max_b() - <Lab>::min_b()).powi(2))
-        .sqrt();
+        let centroid = pixels
+            .par_iter()
+            .copied()
+            .reduce(|| <Lab>::new(0.0, 0.0, 0.0), |a, b| a + b)
+            / pixels.len() as f32;
+
+        let mut dists = vec![0.0f32; pixels.len()];
+        pixels
+            .par_iter()
+            .copied()
+            .zip(&mut dists)
+            .for_each(|(p, dest)| {
+                *dest = centroid.distance(p);
+            });
+
+        let max_dist = dists.par_iter().copied().reduce(|| f32::MIN, f32::max);
+        let min_dist = dists.par_iter().copied().reduce(|| f32::MAX, f32::min);
+        dists.par_iter_mut().for_each(|d| {
+            *d = (*d - min_dist) / (max_dist - min_dist).max(f32::EPSILON);
+        });
 
         let mut local_dists = vec![0.0f32; pixels.len()];
 
@@ -367,8 +395,21 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
                     }
                 }
 
-                *dest = (sum / count as f32) / max_dist
+                *dest = sum / count as f32
             });
+
+        let max_local_dist = local_dists
+            .par_iter()
+            .copied()
+            .reduce(|| f32::MIN, f32::max);
+        let min_local_dist = local_dists
+            .par_iter()
+            .copied()
+            .reduce(|| f32::MAX, f32::min);
+
+        local_dists.par_iter_mut().for_each(|d| {
+            *d = (*d - min_local_dist) / (max_local_dist - min_local_dist).max(f32::EPSILON);
+        });
 
         #[cfg(feature = "dump_local_saliency")]
         {
@@ -400,6 +441,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             .zip(b_saliency.phase_spectrum)
             .zip(b_saliency.amplitude_spectrum)
             .zip(local_dists)
+            .zip(dists)
             .zip(&mut candidates)
             .for_each(
                 |(
@@ -410,40 +452,52 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
                                     (
                                         (
                                             (
-                                                ((((((lab, l_sr), l_msr), l_p), l_a), a_sr), a_msr),
-                                                a_p,
+                                                (
+                                                    (
+                                                        (((((lab, l_sr), l_msr), l_p), l_a), a_sr),
+                                                        a_msr,
+                                                    ),
+                                                    a_p,
+                                                ),
+                                                a_a,
                                             ),
-                                            a_a,
+                                            b_sr,
                                         ),
-                                        b_sr,
+                                        b_msr,
                                     ),
-                                    b_msr,
+                                    b_p,
                                 ),
-                                b_p,
+                                b_a,
                             ),
-                            b_a,
+                            local,
                         ),
-                        local,
+                        global,
                     ),
                     dest,
                 )| {
-                    let outlier_outlier = l_msr.max(a_msr).max(b_msr);
-                    let outliers = l_sr.max(a_sr).max(b_sr).max(outlier_outlier);
-                    let edges = l_p.max(a_p).max(b_p);
-                    let blobs = l_a.max(a_a).max(b_a);
+                    let outliers = (0.5 * l_sr + 0.25 * a_sr + 0.25 * b_sr)
+                        .max(0.5 * l_msr + 0.25 * a_msr + 0.25 * b_msr);
+                    let edges = l_p * 0.5 + a_p * 0.25 + b_p * 0.25;
+                    let blobs = l_a * 0.5 + a_a * 0.25 + b_a * 0.25;
 
-                    // Lerp between blobs <=> outliers <=> edges using local distance. Local
-                    // distance is *high* for edges and features and *low* for blobs/planes of
-                    // colors. If it's neither, then it's probably important if it's an outlier.
-                    let w = if local <= 0.5 {
-                        blobs + 2.0 * local * (outliers - blobs)
-                    } else {
-                        outliers + 2.0 * (local - 0.5) * (edges - outliers)
-                    };
+                    let modifier = global.max(local);
+                    let w = (outliers * 0.7 + edges * 0.2 + blobs * 0.1) * modifier;
 
                     *dest = (lab, w);
                 },
             );
+
+        let min_weight = candidates
+            .par_iter()
+            .map(|(_, w)| *w)
+            .reduce(|| f32::MAX, f32::min);
+        let max_weight = candidates
+            .par_iter()
+            .map(|(_, w)| *w)
+            .reduce(|| f32::MIN, f32::max);
+        candidates.par_iter_mut().for_each(|(_, w)| {
+            *w = (*w - min_weight) / (max_weight - min_weight).max(f32::EPSILON);
+        });
 
         #[cfg(feature = "dump_weights")]
         {
@@ -459,7 +513,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             dump_intermediate("candidates", &quant_candidates, image_width, image_height);
         }
 
-        parallel_kmeans::<PALETTE_SIZE>(&candidates).0
+        o_means::<PALETTE_SIZE>(candidates)
     }
 }
 
@@ -994,4 +1048,224 @@ fn dump_intermediate(name: &str, buffer: &[u8], width: u32, height: u32) {
         image::ColorType::L8,
     )
     .unwrap()
+}
+
+pub(crate) fn o_means<const PALETTE_SIZE: usize>(mut candidates: Vec<(Lab, f32)>) -> Vec<Lab> {
+    let mut final_clusters = vec![];
+
+    loop {
+        let (color, weight) = candidates
+            .par_iter()
+            .copied()
+            .map(|(c, w)| (c * w, w))
+            .reduce(
+                || (<Lab>::new(0.0, 0.0, 0.0), 0.0),
+                |a, b| (a.0 + b.0, a.1 + b.1),
+            );
+
+        let centroid = color / weight.max(f32::EPSILON);
+
+        let var_dist = candidates
+            .par_iter()
+            .map(|(c, w)| c.distance_squared(centroid) * w)
+            .sum::<f32>()
+            / weight.max(f32::EPSILON);
+
+        let sigma = var_dist.sqrt() * 2.0;
+
+        let summaries = array::from_fn::<_, PALETTE_SIZE, _>(|_| {
+            (
+                [
+                    AtomicF32::new(0.0),
+                    AtomicF32::new(0.0),
+                    AtomicF32::new(0.0),
+                ],
+                AtomicF32::new(0.0),
+            )
+        });
+
+        candidates.par_iter().copied().for_each(|(color, weight)| {
+            let rgb: Srgb = color.into_color();
+            let slot = BitPaletteBuilder::<PALETTE_SIZE>::index(rgb.into_format());
+            summaries[slot].0[0].fetch_add(rgb.red * weight, Ordering::Relaxed);
+            summaries[slot].0[1].fetch_add(rgb.green * weight, Ordering::Relaxed);
+            summaries[slot].0[2].fetch_add(rgb.blue * weight, Ordering::Relaxed);
+            summaries[slot].1.fetch_add(weight, Ordering::Relaxed);
+        });
+
+        let mut centroids = KdTree::<_, _, 3, 257, u32>::with_capacity(256);
+
+        for (idx, (color, weight)) in summaries.iter().enumerate() {
+            let count = weight.load(Ordering::Relaxed);
+            if count > 0.0 {
+                let color = Srgb::new(
+                    color[0].load(Ordering::Relaxed) / count,
+                    color[1].load(Ordering::Relaxed) / count,
+                    color[2].load(Ordering::Relaxed) / count,
+                );
+                let color: Lab = color.into_color();
+
+                centroids.add(&[color.l, color.a, color.b], idx as u32);
+            }
+        }
+
+        let mut cluster_assignments = vec![-1; candidates.len()];
+        candidates
+            .par_iter()
+            .copied()
+            .zip(&mut cluster_assignments)
+            .for_each(|((color, _), slot)| {
+                let nearest =
+                    centroids.nearest_one::<SquaredEuclidean>(&[color.l, color.a, color.b]);
+
+                if nearest.distance <= sigma {
+                    *slot = nearest.item as i64;
+                }
+            });
+
+        let cluster_means = array::from_fn::<_, PALETTE_SIZE, _>(|_| {
+            (
+                [
+                    AtomicF32::new(0.0),
+                    AtomicF32::new(0.0),
+                    AtomicF32::new(0.0),
+                ],
+                AtomicF32::new(0.0),
+            )
+        });
+
+        cluster_assignments
+            .par_iter()
+            .enumerate()
+            .for_each(|(idx, &slot)| {
+                if slot > 0 {
+                    let w = candidates[idx].1;
+                    cluster_means[slot as usize].0[0]
+                        .fetch_add(candidates[idx].0.l * w, Ordering::Relaxed);
+                    cluster_means[slot as usize].0[1]
+                        .fetch_add(candidates[idx].0.a * w, Ordering::Relaxed);
+                    cluster_means[slot as usize].0[2]
+                        .fetch_add(candidates[idx].0.b * w, Ordering::Relaxed);
+                    cluster_means[slot as usize]
+                        .1
+                        .fetch_add(w, Ordering::Relaxed);
+                }
+            });
+
+        for _ in 0..100 {
+            centroids = KdTree::<_, _, 3, 257, u32>::with_capacity(256);
+
+            for (cidx, (mean, count)) in cluster_means.iter().enumerate() {
+                let count = count.load(Ordering::Relaxed);
+                if count > 0.0 {
+                    centroids.add(
+                        &[
+                            mean[0].load(Ordering::Relaxed) / count,
+                            mean[1].load(Ordering::Relaxed) / count,
+                            mean[2].load(Ordering::Relaxed) / count,
+                        ],
+                        cidx as u32,
+                    );
+                }
+            }
+
+            let shifts = candidates
+                .par_iter()
+                .copied()
+                .zip(&mut cluster_assignments)
+                .map(|((color, w), slot)| {
+                    let nearest =
+                        centroids.nearest_one::<SquaredEuclidean>(&[color.l, color.a, color.b]);
+
+                    if nearest.distance > sigma {
+                        if *slot == -1 {
+                            return false;
+                        }
+                        let old_slot = *slot;
+                        *slot = -1;
+
+                        cluster_means[old_slot as usize].0[0]
+                            .fetch_sub(color.l * w, Ordering::Relaxed);
+                        cluster_means[old_slot as usize].0[1]
+                            .fetch_sub(color.a * w, Ordering::Relaxed);
+                        cluster_means[old_slot as usize].0[2]
+                            .fetch_sub(color.b * w, Ordering::Relaxed);
+                        cluster_means[old_slot as usize]
+                            .1
+                            .fetch_sub(w, Ordering::Relaxed);
+                        return true;
+                    }
+
+                    if *slot == nearest.item as i64 {
+                        return false;
+                    }
+
+                    let old_slot = *slot;
+                    *slot = nearest.item as i64;
+
+                    if old_slot >= 0 {
+                        cluster_means[old_slot as usize].0[0]
+                            .fetch_sub(color.l * w, Ordering::Relaxed);
+                        cluster_means[old_slot as usize].0[1]
+                            .fetch_sub(color.a * w, Ordering::Relaxed);
+                        cluster_means[old_slot as usize].0[2]
+                            .fetch_sub(color.b * w, Ordering::Relaxed);
+                        cluster_means[old_slot as usize]
+                            .1
+                            .fetch_sub(w, Ordering::Relaxed);
+                    }
+
+                    cluster_means[nearest.item as usize].0[0]
+                        .fetch_add(color.l * w, Ordering::Relaxed);
+                    cluster_means[nearest.item as usize].0[1]
+                        .fetch_add(color.a * w, Ordering::Relaxed);
+                    cluster_means[nearest.item as usize].0[2]
+                        .fetch_add(color.b * w, Ordering::Relaxed);
+                    cluster_means[nearest.item as usize]
+                        .1
+                        .fetch_add(w, Ordering::Relaxed);
+
+                    true
+                })
+                .filter(|shift| *shift)
+                .count();
+
+            if shifts == 0 {
+                break;
+            }
+        }
+
+        for (sum, weight) in cluster_means.iter() {
+            let weight = weight.load(Ordering::Relaxed);
+            if weight > 0.0 {
+                final_clusters.push((
+                    Lab::new(
+                        sum[0].load(Ordering::Relaxed) / weight,
+                        sum[1].load(Ordering::Relaxed) / weight,
+                        sum[2].load(Ordering::Relaxed) / weight,
+                    ),
+                    weight,
+                ));
+            }
+        }
+
+        let outliers = cluster_assignments
+            .iter()
+            .enumerate()
+            .filter(|(_, &cluster)| cluster < 0)
+            .map(|(i, _)| candidates[i])
+            .collect::<Vec<_>>();
+
+        if outliers.is_empty() || outliers.len() == candidates.len() {
+            final_clusters.extend(outliers);
+            break;
+        }
+        candidates = outliers;
+    }
+
+    if final_clusters.len() <= PALETTE_SIZE {
+        final_clusters.into_iter().map(|(c, _)| c).collect()
+    } else {
+        parallel_kmeans::<PALETTE_SIZE>(&final_clusters).0
+    }
 }
