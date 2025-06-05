@@ -19,18 +19,20 @@ k-medians  = [  ]
 median-cut = [  ]
 octree     = [  ]
 # For debugging -- maps the saliency scores used to determine color weights to a greyscale image and dumps each map to a file.
-dump_saliency       = [ "dump_l_saliency", "dump_a_saliency", "dump_b_saliency", "dump_local_saliency", "dump_weights" ]
-dump_l_saliency     = [  ]
-dump_a_saliency     = [  ]
-dump_b_saliency     = [  ]
-dump_local_saliency = [  ]
-dump_weights        = [  ]
+dump-saliency       = [ "dump-l-saliency", "dump-a-saliency", "dump-b-saliency", "dump-local-saliency", "dump-weights" ]
+dump-l-saliency     = [  ]
+dump-a-saliency     = [  ]
+dump-b-saliency     = [  ]
+dump-local-saliency = [  ]
+dump-weights        = [  ]
 # For debugging -- prints the MSE of the quantized image vs the original image.
-dump_mse = [  ]
+dump-mse = [  ]
 # For debugging -- dumps the dssim score of the quantized image vs the original image.
-dump_dssim = [ "dep:dssim-core", "dep:rgb" ]
+dump-dssim = [ "dep:dssim-core", "dep:rgb" ]
+# For debugging -- dumps the hamming distanced of the quantized image's phash vs the original image's phash.
+dump-phash = [ "dep:image_hasher" ]
 # For debugging -- dumps the quantized image to a file with a random file name.
-dump_image = [  ]
+dump-image = [  ]
 
 [dependencies]
 atomic_float  = "1.1.0"
@@ -38,6 +40,7 @@ dashmap       = { version = "6.1.0", features = [ "rayon" ] }
 dilate        = "0.6.3"
 dssim-core    = { version = "3.2.11", optional = true }
 image         = { version = "0.25.6", default-features = false, features = [ "rayon" ] }
+image_hasher  = { version = "3.0.0", optional = true }
 kiddo         = "5.0.3"
 libblur       = { version = "0.18.0", optional = true }
 ordered-float = "5.0.0"

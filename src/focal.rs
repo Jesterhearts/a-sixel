@@ -154,7 +154,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             window_radius >> 1,
         );
 
-        #[cfg(feature = "dump_l_saliency")]
+        #[cfg(feature = "dump-l-saliency")]
         {
             let mut quant_l_saliency = vec![0; pixels.len()];
 
@@ -214,7 +214,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             );
         }
 
-        #[cfg(feature = "dump_a_saliency")]
+        #[cfg(feature = "dump-a-saliency")]
         {
             let mut quant_a_saliency = vec![0; pixels.len()];
 
@@ -279,7 +279,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             );
         }
 
-        #[cfg(feature = "dump_b_saliency")]
+        #[cfg(feature = "dump-b-saliency")]
         {
             let mut quant_b_saliency = vec![0; pixels.len()];
 
@@ -411,7 +411,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             *d = (*d - min_local_dist) / (max_local_dist - min_local_dist).max(f32::EPSILON);
         });
 
-        #[cfg(feature = "dump_local_saliency")]
+        #[cfg(feature = "dump-local-saliency")]
         {
             let mut quant_local_dists = vec![0; pixels.len()];
             local_dists
@@ -499,7 +499,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             *w = (*w - min_weight) / (max_weight - min_weight).max(f32::EPSILON);
         });
 
-        #[cfg(feature = "dump_weights")]
+        #[cfg(feature = "dump-weights")]
         {
             let mut quant_candidates = vec![0; candidates.len()];
             candidates
@@ -1027,11 +1027,11 @@ fn compute_saliency(
 }
 
 #[cfg(any(
-    feature = "dump_l_saliency",
-    feature = "dump_a_saliency",
-    feature = "dump_b_saliency",
-    feature = "dump_local_saliency",
-    feature = "dump_weights"
+    feature = "dump-l-saliency",
+    feature = "dump-a-saliency",
+    feature = "dump-b-saliency",
+    feature = "dump-local-saliency",
+    feature = "dump-weights"
 ))]
 fn dump_intermediate(name: &str, buffer: &[u8], width: u32, height: u32) {
     use std::hash::{
