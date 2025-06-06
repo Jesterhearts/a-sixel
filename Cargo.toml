@@ -27,6 +27,8 @@ dump-local-saliency = [  ]
 dump-weights        = [  ]
 # For debugging -- prints the MSE of the quantized image vs the original image.
 dump-mse = [  ]
+# For debugging -- prints the mean & threshold Delta E of the quantized image vs the original image.
+dump-delta-e = [  ]
 # For debugging -- dumps the dssim score of the quantized image vs the original image.
 dump-dssim = [ "dep:dssim-core", "dep:rgb" ]
 # For debugging -- dumps the hamming distanced of the quantized image's phash vs the original image's phash.
