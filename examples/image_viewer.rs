@@ -77,6 +77,17 @@ use a_sixel::octree::{
     OctreeSixelEncoder8,
     OctreeSixelEncoderMono,
 };
+#[cfg(feature = "wu")]
+use a_sixel::wu::{
+    WuSixelEncoder128,
+    WuSixelEncoder16,
+    WuSixelEncoder256,
+    WuSixelEncoder32,
+    WuSixelEncoder4,
+    WuSixelEncoder64,
+    WuSixelEncoder8,
+    WuSixelEncoderMono,
+};
 use a_sixel::{
     bit::{
         BitSixelEncoder128,
@@ -104,15 +115,11 @@ use strum::{
 enum PaletteFormat {
     #[cfg(feature = "adu")]
     Adu,
-    #[cfg(feature = "focal")]
-    Focal,
-    #[cfg(feature = "median-cut")]
-    MedianCut,
     Bit,
     #[cfg(feature = "bit-merge")]
     BitMerge,
-    #[cfg(feature = "octree")]
-    Octree,
+    #[cfg(feature = "focal")]
+    Focal,
     #[cfg(feature = "k-means")]
     #[strum(serialize = "kmeans", serialize = "k-means")]
     KMeans,
@@ -124,6 +131,12 @@ enum PaletteFormat {
         serialize = "k-med"
     )]
     KMedians,
+    #[cfg(feature = "median-cut")]
+    MedianCut,
+    #[cfg(feature = "octree")]
+    Octree,
+    #[cfg(feature = "wu")]
+    Wu,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display)]
@@ -216,92 +229,6 @@ fn main() -> anyhow::Result<()> {
                 Dither::Bayer => <ADUSixelEncoder256<Bayer>>::encode(&image),
             },
         },
-        #[cfg(feature = "focal")]
-        PaletteFormat::Focal => match args.palette_size {
-            0..3 => match args.dither {
-                Dither::Sobol => <FocalSixelEncoderMono<Sobol>>::encode(&image),
-                Dither::Sierra => <FocalSixelEncoderMono>::encode(&image),
-                Dither::Bayer => <FocalSixelEncoderMono<Bayer>>::encode(&image),
-            },
-            3..6 => match args.dither {
-                Dither::Sobol => <FocalSixelEncoder4<Sobol>>::encode(&image),
-                Dither::Sierra => <FocalSixelEncoder4>::encode(&image),
-                Dither::Bayer => <FocalSixelEncoder4<Bayer>>::encode(&image),
-            },
-            6..12 => match args.dither {
-                Dither::Sobol => <FocalSixelEncoder8<Sobol>>::encode(&image),
-                Dither::Sierra => <FocalSixelEncoder8>::encode(&image),
-                Dither::Bayer => <FocalSixelEncoder8<Bayer>>::encode(&image),
-            },
-            12..24 => match args.dither {
-                Dither::Sobol => <FocalSixelEncoder16<Sobol>>::encode(&image),
-                Dither::Sierra => <FocalSixelEncoder16>::encode(&image),
-                Dither::Bayer => <FocalSixelEncoder16<Bayer>>::encode(&image),
-            },
-            24..48 => match args.dither {
-                Dither::Sobol => <FocalSixelEncoder32<Sobol>>::encode(&image),
-                Dither::Sierra => <FocalSixelEncoder32>::encode(&image),
-                Dither::Bayer => <FocalSixelEncoder32<Bayer>>::encode(&image),
-            },
-            48..86 => match args.dither {
-                Dither::Sobol => <FocalSixelEncoder64<Sobol>>::encode(&image),
-                Dither::Sierra => <FocalSixelEncoder64>::encode(&image),
-                Dither::Bayer => <FocalSixelEncoder64<Bayer>>::encode(&image),
-            },
-            86..192 => match args.dither {
-                Dither::Sobol => <FocalSixelEncoder128<Sobol>>::encode(&image),
-                Dither::Sierra => <FocalSixelEncoder128>::encode(&image),
-                Dither::Bayer => <FocalSixelEncoder128<Bayer>>::encode(&image),
-            },
-            _ => match args.dither {
-                Dither::Sobol => <FocalSixelEncoder256<Sobol>>::encode(&image),
-                Dither::Sierra => <FocalSixelEncoder256>::encode(&image),
-                Dither::Bayer => <FocalSixelEncoder256<Bayer>>::encode(&image),
-            },
-        },
-        #[cfg(feature = "median-cut")]
-        PaletteFormat::MedianCut => match args.palette_size {
-            0..3 => match args.dither {
-                Dither::Sobol => <MedianCutSixelEncoderMono<Sobol>>::encode(&image),
-                Dither::Sierra => <MedianCutSixelEncoderMono>::encode(&image),
-                Dither::Bayer => <MedianCutSixelEncoderMono<Bayer>>::encode(&image),
-            },
-            3..6 => match args.dither {
-                Dither::Sobol => <MedianCutSixelEncoder4<Sobol>>::encode(&image),
-                Dither::Sierra => <MedianCutSixelEncoder4>::encode(&image),
-                Dither::Bayer => <MedianCutSixelEncoder4<Bayer>>::encode(&image),
-            },
-            6..12 => match args.dither {
-                Dither::Sobol => <MedianCutSixelEncoder8<Sobol>>::encode(&image),
-                Dither::Sierra => <MedianCutSixelEncoder8>::encode(&image),
-                Dither::Bayer => <MedianCutSixelEncoder8<Bayer>>::encode(&image),
-            },
-            12..24 => match args.dither {
-                Dither::Sobol => <MedianCutSixelEncoder16<Sobol>>::encode(&image),
-                Dither::Sierra => <MedianCutSixelEncoder16>::encode(&image),
-                Dither::Bayer => <MedianCutSixelEncoder16<Bayer>>::encode(&image),
-            },
-            24..48 => match args.dither {
-                Dither::Sobol => <MedianCutSixelEncoder32<Sobol>>::encode(&image),
-                Dither::Sierra => <MedianCutSixelEncoder32>::encode(&image),
-                Dither::Bayer => <MedianCutSixelEncoder32<Bayer>>::encode(&image),
-            },
-            48..86 => match args.dither {
-                Dither::Sobol => <MedianCutSixelEncoder64<Sobol>>::encode(&image),
-                Dither::Sierra => <MedianCutSixelEncoder64>::encode(&image),
-                Dither::Bayer => <MedianCutSixelEncoder64<Bayer>>::encode(&image),
-            },
-            86..192 => match args.dither {
-                Dither::Sobol => <MedianCutSixelEncoder128<Sobol>>::encode(&image),
-                Dither::Sierra => <MedianCutSixelEncoder128>::encode(&image),
-                Dither::Bayer => <MedianCutSixelEncoder128<Bayer>>::encode(&image),
-            },
-            _ => match args.dither {
-                Dither::Sobol => <MedianCutSixelEncoder256<Sobol>>::encode(&image),
-                Dither::Sierra => <MedianCutSixelEncoder256>::encode(&image),
-                Dither::Bayer => <MedianCutSixelEncoder256<Bayer>>::encode(&image),
-            },
-        },
         PaletteFormat::Bit => match args.palette_size {
             0..3 => match args.dither {
                 Dither::Sobol => <BitSixelEncoderMono<Sobol>>::encode(&image),
@@ -387,47 +314,47 @@ fn main() -> anyhow::Result<()> {
                 Dither::Bayer => <BitMergeSixelEncoder256<Bayer>>::encode(&image),
             },
         },
-        #[cfg(feature = "octree")]
-        PaletteFormat::Octree => match args.palette_size {
+        #[cfg(feature = "focal")]
+        PaletteFormat::Focal => match args.palette_size {
             0..3 => match args.dither {
-                Dither::Sobol => <OctreeSixelEncoderMono<Sobol>>::encode(&image),
-                Dither::Sierra => <OctreeSixelEncoderMono>::encode(&image),
-                Dither::Bayer => <OctreeSixelEncoderMono<Bayer>>::encode(&image),
+                Dither::Sobol => <FocalSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoderMono<Bayer>>::encode(&image),
             },
             3..6 => match args.dither {
-                Dither::Sobol => <OctreeSixelEncoder4<Sobol>>::encode(&image),
-                Dither::Sierra => <OctreeSixelEncoder4>::encode(&image),
-                Dither::Bayer => <OctreeSixelEncoder4<Bayer>>::encode(&image),
+                Dither::Sobol => <FocalSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder4>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder4<Bayer>>::encode(&image),
             },
             6..12 => match args.dither {
-                Dither::Sobol => <OctreeSixelEncoder8<Sobol>>::encode(&image),
-                Dither::Sierra => <OctreeSixelEncoder8>::encode(&image),
-                Dither::Bayer => <OctreeSixelEncoder8<Bayer>>::encode(&image),
+                Dither::Sobol => <FocalSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder8>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder8<Bayer>>::encode(&image),
             },
             12..24 => match args.dither {
-                Dither::Sobol => <OctreeSixelEncoder16<Sobol>>::encode(&image),
-                Dither::Sierra => <OctreeSixelEncoder16>::encode(&image),
-                Dither::Bayer => <OctreeSixelEncoder16<Bayer>>::encode(&image),
+                Dither::Sobol => <FocalSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder16>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder16<Bayer>>::encode(&image),
             },
             24..48 => match args.dither {
-                Dither::Sobol => <OctreeSixelEncoder32<Sobol>>::encode(&image),
-                Dither::Sierra => <OctreeSixelEncoder32>::encode(&image),
-                Dither::Bayer => <OctreeSixelEncoder32<Bayer>>::encode(&image),
+                Dither::Sobol => <FocalSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder32>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder32<Bayer>>::encode(&image),
             },
             48..86 => match args.dither {
-                Dither::Sobol => <OctreeSixelEncoder64<Sobol>>::encode(&image),
-                Dither::Sierra => <OctreeSixelEncoder64>::encode(&image),
-                Dither::Bayer => <OctreeSixelEncoder64<Bayer>>::encode(&image),
+                Dither::Sobol => <FocalSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder64>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder64<Bayer>>::encode(&image),
             },
             86..192 => match args.dither {
-                Dither::Sobol => <OctreeSixelEncoder128<Sobol>>::encode(&image),
-                Dither::Sierra => <OctreeSixelEncoder128>::encode(&image),
-                Dither::Bayer => <OctreeSixelEncoder128<Bayer>>::encode(&image),
+                Dither::Sobol => <FocalSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder128>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder128<Bayer>>::encode(&image),
             },
             _ => match args.dither {
-                Dither::Sobol => <OctreeSixelEncoder256<Sobol>>::encode(&image),
-                Dither::Sierra => <OctreeSixelEncoder256>::encode(&image),
-                Dither::Bayer => <OctreeSixelEncoder256<Bayer>>::encode(&image),
+                Dither::Sobol => <FocalSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <FocalSixelEncoder256>::encode(&image),
+                Dither::Bayer => <FocalSixelEncoder256<Bayer>>::encode(&image),
             },
         },
         #[cfg(feature = "k-means")]
@@ -514,6 +441,135 @@ fn main() -> anyhow::Result<()> {
                 Dither::Sobol => <KMediansSixelEncoder256<Sobol>>::encode(&image),
                 Dither::Sierra => <KMediansSixelEncoder256>::encode(&image),
                 Dither::Bayer => <KMediansSixelEncoder256<Bayer>>::encode(&image),
+            },
+        },
+        #[cfg(feature = "median-cut")]
+        PaletteFormat::MedianCut => match args.palette_size {
+            0..3 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoderMono<Bayer>>::encode(&image),
+            },
+            3..6 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder4>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder4<Bayer>>::encode(&image),
+            },
+            6..12 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder8>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder8<Bayer>>::encode(&image),
+            },
+            12..24 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder16>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder16<Bayer>>::encode(&image),
+            },
+            24..48 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder32>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder32<Bayer>>::encode(&image),
+            },
+            48..86 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder64>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder64<Bayer>>::encode(&image),
+            },
+            86..192 => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder128>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder128<Bayer>>::encode(&image),
+            },
+            _ => match args.dither {
+                Dither::Sobol => <MedianCutSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <MedianCutSixelEncoder256>::encode(&image),
+                Dither::Bayer => <MedianCutSixelEncoder256<Bayer>>::encode(&image),
+            },
+        },
+        #[cfg(feature = "octree")]
+        PaletteFormat::Octree => match args.palette_size {
+            0..3 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoderMono<Bayer>>::encode(&image),
+            },
+            3..6 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder4>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder4<Bayer>>::encode(&image),
+            },
+            6..12 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder8>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder8<Bayer>>::encode(&image),
+            },
+            12..24 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder16>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder16<Bayer>>::encode(&image),
+            },
+            24..48 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder32>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder32<Bayer>>::encode(&image),
+            },
+            48..86 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder64>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder64<Bayer>>::encode(&image),
+            },
+            86..192 => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder128>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder128<Bayer>>::encode(&image),
+            },
+            _ => match args.dither {
+                Dither::Sobol => <OctreeSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <OctreeSixelEncoder256>::encode(&image),
+                Dither::Bayer => <OctreeSixelEncoder256<Bayer>>::encode(&image),
+            },
+        },
+        #[cfg(feature = "wu")]
+        PaletteFormat::Wu => match args.palette_size {
+            0..3 => match args.dither {
+                Dither::Sobol => <WuSixelEncoderMono<Sobol>>::encode(&image),
+                Dither::Sierra => <WuSixelEncoderMono>::encode(&image),
+                Dither::Bayer => <WuSixelEncoderMono<Bayer>>::encode(&image),
+            },
+            3..6 => match args.dither {
+                Dither::Sobol => <WuSixelEncoder4<Sobol>>::encode(&image),
+                Dither::Sierra => <WuSixelEncoder4>::encode(&image),
+                Dither::Bayer => <WuSixelEncoder4<Bayer>>::encode(&image),
+            },
+            6..12 => match args.dither {
+                Dither::Sobol => <WuSixelEncoder8<Sobol>>::encode(&image),
+                Dither::Sierra => <WuSixelEncoder8>::encode(&image),
+                Dither::Bayer => <WuSixelEncoder8<Bayer>>::encode(&image),
+            },
+            12..24 => match args.dither {
+                Dither::Sobol => <WuSixelEncoder16<Sobol>>::encode(&image),
+                Dither::Sierra => <WuSixelEncoder16>::encode(&image),
+                Dither::Bayer => <WuSixelEncoder16<Bayer>>::encode(&image),
+            },
+            24..48 => match args.dither {
+                Dither::Sobol => <WuSixelEncoder32<Sobol>>::encode(&image),
+                Dither::Sierra => <WuSixelEncoder32>::encode(&image),
+                Dither::Bayer => <WuSixelEncoder32<Bayer>>::encode(&image),
+            },
+            48..86 => match args.dither {
+                Dither::Sobol => <WuSixelEncoder64<Sobol>>::encode(&image),
+                Dither::Sierra => <WuSixelEncoder64>::encode(&image),
+                Dither::Bayer => <WuSixelEncoder64<Bayer>>::encode(&image),
+            },
+            86..192 => match args.dither {
+                Dither::Sobol => <WuSixelEncoder128<Sobol>>::encode(&image),
+                Dither::Sierra => <WuSixelEncoder128>::encode(&image),
+                Dither::Bayer => <WuSixelEncoder128<Bayer>>::encode(&image),
+            },
+            _ => match args.dither {
+                Dither::Sobol => <WuSixelEncoder256<Sobol>>::encode(&image),
+                Dither::Sierra => <WuSixelEncoder256>::encode(&image),
+                Dither::Bayer => <WuSixelEncoder256<Bayer>>::encode(&image),
             },
         },
     };
