@@ -138,7 +138,7 @@ use crate::octree::OctreeSixelEncoder256;
 #[cfg(feature = "wu")]
 pub use crate::wu::WuPaletteBuilder;
 #[cfg(feature = "wu")]
-pub use crate::wu::WuSixelEncoder256;
+use crate::wu::WuSixelEncoder256;
 use crate::{
     bit::BitSixelEncoder256,
     dither::{
