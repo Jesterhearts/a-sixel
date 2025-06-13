@@ -54,7 +54,7 @@ palette       = { version = "0.7.6", default-features = false, features = [ "std
 rustyml       = { version = "0.6.2", optional = true }
 rayon         = "1.10.0"
 rgb           = { version = "0.8.50", optional = true }
-rustfft       = { version = "6.3.0", optional = true }
+rustfft       = { version = "6.4.0", optional = true }
 sobol_burley  = "0.5.0"
 
 [dev-dependencies]
