@@ -290,7 +290,7 @@ impl Dither for Bayer {
     const KERNEL: &[(isize, isize, f32)] = &[];
 
     fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
-        let matrix_size = in_palette.len().ilog2().max(2) as usize;
+        let matrix_size = image.width().max(image.height()).ilog2().max(2) as usize;
         let mut matrix = vec![0.0; matrix_size * matrix_size];
 
         (0..matrix_size as u32)

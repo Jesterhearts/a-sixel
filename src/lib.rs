@@ -270,7 +270,11 @@ pub type WuSixelEncoder<D = Sierra> = WuSixelEncoder256<D>;
 
 impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
     pub fn encode(image: &RgbImage) -> String {
-        let palette = P::build_palette(image);
+        let palette = if image.width().saturating_mul(image.height()) < P::PALETTE_SIZE as u32 {
+            image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>()
+        } else {
+            P::build_palette(image)
+        };
 
         let mut sixel_string = r#"Pq"1;1;"#.to_string();
         sixel_string
