@@ -155,13 +155,15 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(
             })
             .unwrap();
         let count = maximin.1.load(Ordering::Relaxed);
-        let rgb = Srgb::new(
-            maximin.0[0].load(Ordering::Relaxed) / count,
-            maximin.0[1].load(Ordering::Relaxed) / count,
-            maximin.0[2].load(Ordering::Relaxed) / count,
-        );
-        let mean: Lab = rgb.into_color();
-        centroids.add(&[mean.l, mean.a, mean.b], idx as u32);
+        if count > 0.0 {
+            let rgb = Srgb::new(
+                maximin.0[0].load(Ordering::Relaxed) / count,
+                maximin.0[1].load(Ordering::Relaxed) / count,
+                maximin.0[2].load(Ordering::Relaxed) / count,
+            );
+            let mean: Lab = rgb.into_color();
+            centroids.add(&[mean.l, mean.a, mean.b], idx as u32);
+        }
     }
 
     let mut cluster_assignments = vec![0; candidates.len()];
@@ -204,14 +206,17 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(
         centroids = KdTree::<_, _, 3, 1025, u32>::with_capacity(PALETTE_SIZE);
 
         for (cidx, (mean, count)) in cluster_means.iter().enumerate() {
-            centroids.add(
-                &[
-                    mean[0].load(Ordering::Relaxed) / count.load(Ordering::Relaxed),
-                    mean[1].load(Ordering::Relaxed) / count.load(Ordering::Relaxed),
-                    mean[2].load(Ordering::Relaxed) / count.load(Ordering::Relaxed),
-                ],
-                cidx as u32,
-            );
+            let count = count.load(Ordering::Relaxed);
+            if count > 0.0 {
+                centroids.add(
+                    &[
+                        mean[0].load(Ordering::Relaxed) / count,
+                        mean[1].load(Ordering::Relaxed) / count,
+                        mean[2].load(Ordering::Relaxed) / count,
+                    ],
+                    cidx as u32,
+                );
+            }
         }
 
         let shifts = candidates
@@ -254,11 +259,13 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(
 
     cluster_means
         .iter()
+        .filter(|(_, count)| count.load(Ordering::Relaxed) > 0.0)
         .map(|(mean, count)| {
-            let l = mean[0].load(Ordering::Relaxed) / count.load(Ordering::Relaxed);
-            let a = mean[1].load(Ordering::Relaxed) / count.load(Ordering::Relaxed);
-            let b = mean[2].load(Ordering::Relaxed) / count.load(Ordering::Relaxed);
-            (Lab::new(l, a, b), count.load(Ordering::Relaxed))
+            let count = count.load(Ordering::Relaxed);
+            let l = mean[0].load(Ordering::Relaxed) / count;
+            let a = mean[1].load(Ordering::Relaxed) / count;
+            let b = mean[2].load(Ordering::Relaxed) / count;
+            (Lab::new(l, a, b), count)
         })
         .unzip()
 }

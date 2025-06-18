@@ -9,7 +9,10 @@
 use dilate::DilateExpand;
 use image::RgbImage;
 use kiddo::float::kdtree::KdTree;
-use palette::Lab;
+use palette::{
+    color_difference::EuclideanDistance,
+    Lab,
+};
 use rayon::{
     iter::{
         IndexedParallelIterator,
@@ -33,18 +36,7 @@ pub trait Dither: private::Sealed {
 
     /// Take the input image and convert it to the input palette, applying a
     /// dithering algorithm to the result.
-    ///
-    /// `target_palette_size` indicates the size of the palette that was
-    /// targetted during palette creation. This is used by some algorithms e.g.
-    /// Bayer to determine the error level for dithering. It should be `>=
-    /// in_palette.len()`.
-    fn dither_and_palettize(
-        image: &RgbImage,
-        in_palette: &[Lab],
-        target_palette_size: usize,
-    ) -> Vec<usize> {
-        let _ = target_palette_size;
-
+    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
         let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
 
         let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
@@ -103,7 +95,7 @@ impl Dither for NoDither {
     const DIV: f32 = 1.0;
     const KERNEL: &[(isize, isize, f32)] = &[];
 
-    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab], _: usize) -> Vec<usize> {
+    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
         let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
 
         let mut palette = KdTree::<_, _, 3, 32, u32>::with_capacity(in_palette.len());
@@ -297,36 +289,20 @@ impl Dither for Bayer {
     const DIV: f32 = 0.0;
     const KERNEL: &[(isize, isize, f32)] = &[];
 
-    fn dither_and_palettize(
-        image: &RgbImage,
-        in_palette: &[Lab],
-        target_palette_size: usize,
-    ) -> Vec<usize> {
-        let r = (1usize << 8).div_ceil(target_palette_size.div_ceil(3));
-        let matrix_size = r.next_power_of_two();
-        let r = r as f32;
-        let mut l_matrix = vec![0.0; matrix_size * matrix_size];
-        let mut a_matrix = vec![0.0; matrix_size * matrix_size];
-        let mut b_matrix = vec![0.0; matrix_size * matrix_size];
+    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
+        let matrix_size = in_palette.len().ilog2().max(2) as usize;
+        let mut matrix = vec![0.0; matrix_size * matrix_size];
 
         (0..matrix_size as u32)
             .into_par_iter()
-            .zip(l_matrix.par_chunks_mut(matrix_size))
-            .zip(a_matrix.par_chunks_mut(matrix_size))
-            .zip(b_matrix.par_chunks_mut(matrix_size))
-            .for_each(|(((y, row_l), row_a), row_b)| {
-                for (x, ((cell_l, cell_a), cell_b)) in
-                    row_l.iter_mut().zip(row_a).zip(row_b).enumerate()
-                {
+            .zip(matrix.par_chunks_mut(matrix_size))
+            .for_each(|(y, row)| {
+                for (x, cell) in row.iter_mut().enumerate() {
                     let x = x as u32;
                     let bits = (x ^ y).dilate_expand::<2>().value()
                         | (y.dilate_expand::<2>().value() << 1);
                     let bits = bits.reverse_bits() >> bits.leading_zeros();
-                    let partial_thresh = bits as f32 / matrix_size.pow(2) as f32;
-
-                    *cell_l = partial_thresh - 0.5;
-                    *cell_a = partial_thresh - 0.5;
-                    *cell_b = partial_thresh - 0.5;
+                    *cell = bits as f32 / matrix_size.pow(2) as f32;
                 }
             });
 
@@ -346,14 +322,20 @@ impl Dither for Bayer {
                 let x = (idx % image.width() as usize) % matrix_size;
                 let y = (idx / image.width() as usize) % matrix_size;
 
-                let m_idx = x + y * matrix_size;
-                let l = p.l + r * l_matrix[m_idx];
-                let a = p.a + r * a_matrix[m_idx];
-                let b = p.b + r * b_matrix[m_idx];
+                let [l1, l2] = palette
+                    .nearest_n::<kiddo::SquaredEuclidean>(p.as_ref(), 2)
+                    .try_into()
+                    .unwrap();
 
-                *dest = palette
-                    .nearest_one::<kiddo::SquaredEuclidean>(&[l, a, b])
-                    .item;
+                let p_dist = in_palette[l1.item].distance_squared(in_palette[l2.item]);
+                let t = ((l1.distance - l2.distance + p_dist) / (2.0 * p_dist)).clamp(0.0, 1.0);
+
+                let m_idx = x + y * matrix_size;
+                if t > matrix[m_idx] {
+                    *dest = l2.item;
+                } else {
+                    *dest = l1.item;
+                }
             });
 
         result
@@ -369,13 +351,8 @@ impl Dither for Sobol {
     const DIV: f32 = 0.0;
     const KERNEL: &[(isize, isize, f32)] = &[];
 
-    fn dither_and_palettize(
-        image: &RgbImage,
-        in_palette: &[Lab],
-        target_palette_size: usize,
-    ) -> Vec<usize> {
-        let r = (1usize << 8).div_ceil(target_palette_size * target_palette_size.ilog2() as usize)
-            as f32;
+    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
+        let r = (1usize << 8).div_ceil(in_palette.len() * in_palette.len().ilog2() as usize) as f32;
 
         let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
         for (idx, color) in in_palette.iter().enumerate() {
