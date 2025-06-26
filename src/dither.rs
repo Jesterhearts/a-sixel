@@ -21,7 +21,7 @@ use rayon::{
     },
     slice::ParallelSliceMut,
 };
-use sobol_burley::sample_4d;
+use sobol_burley::sample;
 
 use crate::{
     private,
@@ -352,8 +352,6 @@ impl Dither for Sobol {
     const KERNEL: &[(isize, isize, f32)] = &[];
 
     fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
-        let r = (1usize << 8).div_ceil(in_palette.len() * in_palette.len().ilog2() as usize) as f32;
-
         let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
         for (idx, color) in in_palette.iter().enumerate() {
             palette.add(color.as_ref(), idx);
@@ -367,15 +365,21 @@ impl Dither for Sobol {
             .enumerate()
             .zip(&mut result)
             .for_each(|((idx, p), dest)| {
-                let [l, a, b, _] = sample_4d(idx as u32 % (1 << 16), 0, idx as u32 / (1 << 16));
+                let thresh = sample(idx as u32 % (1 << 16), 0, idx as u32 / (1 << 16));
 
-                let l = p.l + (l - 0.5) * 2.0 * r;
-                let a = p.a + (a - 0.5) * 2.0 * r;
-                let b = p.b + (b - 0.5) * 2.0 * r;
+                let [l1, l2] = palette
+                    .nearest_n::<kiddo::SquaredEuclidean>(p.as_ref(), 2)
+                    .try_into()
+                    .unwrap();
 
-                *dest = palette
-                    .nearest_one::<kiddo::SquaredEuclidean>(&[l, a, b])
-                    .item;
+                let p_dist = in_palette[l1.item].distance_squared(in_palette[l2.item]);
+                let t = ((l1.distance - l2.distance + p_dist) / (2.0 * p_dist)).clamp(0.0, 1.0);
+
+                if t > thresh {
+                    *dest = l2.item;
+                } else {
+                    *dest = l1.item;
+                }
             });
 
         result
