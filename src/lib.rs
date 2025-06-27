@@ -507,16 +507,39 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                 {
                     let mut stack_string = SixelRow::new(sixel_string, color);
                     for idx in 0..stack[0].0.len() {
-                        let bits = if stack[0].1[idx][3] == 0 {
-                            0
-                        } else {
-                            (stack[0].0[idx] == color) as u8
-                                | ((stack.get(1).map(|(r, _)| r[idx]) == Some(color)) as u8) << 1
-                                | ((stack.get(2).map(|(r, _)| r[idx]) == Some(color)) as u8) << 2
-                                | ((stack.get(3).map(|(r, _)| r[idx]) == Some(color)) as u8) << 3
-                                | ((stack.get(4).map(|(r, _)| r[idx]) == Some(color)) as u8) << 4
-                                | ((stack.get(5).map(|(r, _)| r[idx]) == Some(color)) as u8) << 5
-                        };
+                        let bit0 = (stack[0].0[idx] == color && stack[0].1[idx][3] != 0) as u8;
+                        let bit1 = (stack
+                            .get(1)
+                            .filter(|(_, v)| v[idx][3] != 0)
+                            .map(|(r, _)| r[idx])
+                            == Some(color)) as u8;
+                        let bit2 = (stack
+                            .get(2)
+                            .filter(|(_, v)| v[idx][3] != 0)
+                            .map(|(r, _)| r[idx])
+                            == Some(color)) as u8;
+                        let bit3 = (stack
+                            .get(3)
+                            .filter(|(_, v)| v[idx][3] != 0)
+                            .map(|(r, _)| r[idx])
+                            == Some(color)) as u8;
+                        let bit4 = (stack
+                            .get(4)
+                            .filter(|(_, v)| v[idx][3] != 0)
+                            .map(|(r, _)| r[idx])
+                            == Some(color)) as u8;
+                        let bit5 = (stack
+                            .get(5)
+                            .filter(|(_, v)| v[idx][3] != 0)
+                            .map(|(r, _)| r[idx])
+                            == Some(color)) as u8;
+
+                        let bits = bit0
+                            | (bit1 << 1)
+                            | (bit2 << 2)
+                            | (bit3 << 3)
+                            | (bit4 << 4)
+                            | (bit5 << 5);
                         let char = num2six(bits);
                         stack_string.push(char);
                     }
