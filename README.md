@@ -6,10 +6,10 @@ A sixel library for encoding images.
 
 ```rust
 use a_sixel::BitMergeSixelEncoderBest;
-use image::RgbImage;
+use image::RgbaImage;
 
-let img = RgbImage::new(100, 100);
-println!("{}", <BitMergeSixelEncoderBest>::encode(&img));
+let img = RgbaImage::new(100, 100);
+println!("{}", <BitMergeSixelEncoderBest>::encode(img));
 ```
 
 ## Transparency
