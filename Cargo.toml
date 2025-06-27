@@ -11,11 +11,12 @@ exclude     = [ "test_images" ]
 
 [features]
 default              = [ "adu", "bit-merge", "focal", "k-means" ]
+all-algorithms       = [ "adu", "bit-merge", "focal", "k-means", "k-medians", "median-cut", "octree", "wu" ]
 adu                  = [  ]
 bit-merge            = [ "k-means" ]
-focal                = [ "k-means", "dep:libblur", "dep:rustfft" ]
-k-means              = [  ]
-k-medians            = [ "dep:dashmap" ]
+focal                = [ "k-means", "dep:libblur", "dep:rustfft", "dep:atomic_float" ]
+k-means              = [ "dep:atomic_float" ]
+k-medians            = [ "dep:dashmap", "dep:atomic_float" ]
 median-cut           = [  ]
 octree               = [  ]
 wu                   = [ "dep:ndarray", "dep:rustyml" ]
@@ -41,7 +42,7 @@ dump-image = [  ]
 ENABLE_DOC_AUTO_CFG = [  ]
 
 [dependencies]
-atomic_float  = "1.1.0"
+atomic_float  = { version = "1.1.0", optional = true }
 dashmap       = { version = "6.1.0", optional = true, features = [ "rayon" ] }
 dilate        = "0.6.3"
 dssim-core    = { version = "3.2.11", optional = true }
