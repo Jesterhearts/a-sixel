@@ -1,24 +1,25 @@
 [package]
 name        = "a-sixel"
-version     = "0.4.1"
+version     = "0.5.0"
 edition     = "2021"
 license     = "MIT OR Apache-2.0"
-description = "A small sixel + palette selection + dithering library. "
+description = "A small sixel + palette selection + dithering library."
 keywords    = [ "sixel", "terminal", "encoding", "quantization", "dithering" ]
 readme      = "README.md"
 repository  = "https://github.com/Jesterhearts/a-sixel"
 exclude     = [ "test_images" ]
 
 [features]
-default    = [ "adu", "bit-merge", "focal", "k-means" ]
-adu        = [  ]
-bit-merge  = [ "k-means" ]
-focal      = [ "k-means", "dep:libblur", "dep:rustfft" ]
-k-means    = [  ]
-k-medians  = [  ]
-median-cut = [  ]
-octree     = [  ]
-wu         = [ "dep:ndarray", "dep:rustyml" ]
+default              = [ "adu", "bit-merge", "focal", "k-means" ]
+adu                  = [  ]
+bit-merge            = [ "k-means" ]
+focal                = [ "k-means", "dep:libblur", "dep:rustfft" ]
+k-means              = [  ]
+k-medians            = [  ]
+median-cut           = [  ]
+octree               = [  ]
+wu                   = [ "dep:ndarray", "dep:rustyml" ]
+partial-transparency = [ "dep:termbg" ]
 # For debugging -- maps the saliency scores used to determine color weights to a greyscale image and dumps each map to a file.
 dump-saliency       = [ "dump-l-saliency", "dump-a-saliency", "dump-b-saliency", "dump-local-saliency", "dump-weights" ]
 dump-l-saliency     = [  ]
@@ -56,6 +57,7 @@ rayon         = "1.10.0"
 rgb           = { version = "0.8.50", optional = true }
 rustfft       = { version = "6.4.0", optional = true }
 sobol_burley  = "0.5.0"
+termbg        = { version = "0.6.2", optional = true }
 
 [dev-dependencies]
 anyhow = "1.0.98"

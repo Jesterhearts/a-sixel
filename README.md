@@ -1,6 +1,6 @@
 # a-sixel
 
-A-Sixel library for encoding sixel images.
+A sixel library for encoding images.
 
 ## Basic Usage
 
@@ -11,6 +11,19 @@ use image::RgbImage;
 let img = RgbImage::new(100, 100);
 println!("{}", <BitMergeSixelEncoderBest>::encode(&img));
 ```
+
+## Transparency
+By default, `a-sixel` handles transparency by setting any fully-transparent pixels to all-bits-zero.
+This translates to a transparent pixel in most sixel implementations, but some terminals may not
+support this.
+
+Sixel does not natively support partial transparency, but this library does have some support for
+rendering images as if partial transparency was supported. If the `partial-transparency` feature is
+enabled, `a-sixel` will query the terminal and attempt to determine the background color. Partially
+transparent pixels will then be blended with this background color before encoding. Note that with
+this approach, changing the terminal background color will not update partially transparent pixels
+to match. You will need to re-encode the image if the background color changes.
+
 
 ## Choosing an Encoder
 - I want good quality:

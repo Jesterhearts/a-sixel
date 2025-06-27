@@ -90,6 +90,7 @@ use std::{
 use image::{
     Rgb,
     RgbImage,
+    RgbaImage,
 };
 use palette::{
     encoding::Srgb,
@@ -269,7 +270,40 @@ pub type OctreeSixelEncoder<D = Sierra, const USE_MIN_HEAP: bool = false> =
 pub type WuSixelEncoder<D = Sierra> = WuSixelEncoder256<D>;
 
 impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
-    pub fn encode(image: &RgbImage) -> String {
+    pub fn encode(#[allow(unused_mut)] mut rgba: RgbaImage) -> String {
+        #[cfg(feature = "partial-transparency")]
+        {
+            use std::time::Duration;
+
+            let bg_color = termbg::rgb(Duration::from_millis(100))
+                .map(|rgb| {
+                    Rgb([
+                        (rgb.r as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
+                        (rgb.g as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
+                        (rgb.b as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
+                    ])
+                })
+                .unwrap_or(Rgb([0, 0, 0]));
+            rgba.par_pixels_mut().for_each(|pixel| {
+                use image::{
+                    Pixel,
+                    Rgba,
+                };
+
+                let mut color = Rgba([bg_color[0], bg_color[1], bg_color[2], pixel[3]]);
+                color.blend(pixel);
+                *pixel = color;
+            });
+        }
+        let image = RgbImage::from_raw(
+            rgba.width(),
+            rgba.height(),
+            rgba.pixels()
+                .flat_map(|p| [p[0], p[1], p[2]])
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let image = &image;
         let palette = if image.width().saturating_mul(image.height()) < P::PALETTE_SIZE as u32 {
             image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>()
         } else {
@@ -447,8 +481,10 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                 .expect("Failed to save output image");
         }
 
-        let rows: Vec<&[usize]> = paletted_pixels
+        let rgba_pixels = rgba.pixels().collect::<Vec<_>>();
+        let rows = paletted_pixels
             .chunks(image.width() as usize)
+            .zip(rgba_pixels.chunks(image.width() as usize))
             .collect::<Vec<_>>();
 
         let mut strings = vec![String::new(); rows.len().div_ceil(6)];
@@ -459,7 +495,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                     Vec::from_iter((0..P::PALETTE_SIZE).map(|_| AtomicBool::new(false)));
                 stack
                     .par_iter()
-                    .flat_map(|row| row.par_iter().copied())
+                    .flat_map(|(row, _)| row.par_iter().copied())
                     .for_each(|idx| {
                         row_palette[idx].store(true, Ordering::Relaxed);
                     });
@@ -470,13 +506,17 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                     .filter(|(_, v)| v.load(Ordering::Relaxed))
                 {
                     let mut stack_string = SixelRow::new(sixel_string, color);
-                    for idx in 0..stack[0].len() {
-                        let bits = (stack[0][idx] == color) as u8
-                            | ((stack.get(1).map(|r| r[idx]) == Some(color)) as u8) << 1
-                            | ((stack.get(2).map(|r| r[idx]) == Some(color)) as u8) << 2
-                            | ((stack.get(3).map(|r| r[idx]) == Some(color)) as u8) << 3
-                            | ((stack.get(4).map(|r| r[idx]) == Some(color)) as u8) << 4
-                            | ((stack.get(5).map(|r| r[idx]) == Some(color)) as u8) << 5;
+                    for idx in 0..stack[0].0.len() {
+                        let bits = if stack[0].1[idx][3] == 0 {
+                            0
+                        } else {
+                            (stack[0].0[idx] == color) as u8
+                                | ((stack.get(1).map(|(r, _)| r[idx]) == Some(color)) as u8) << 1
+                                | ((stack.get(2).map(|(r, _)| r[idx]) == Some(color)) as u8) << 2
+                                | ((stack.get(3).map(|(r, _)| r[idx]) == Some(color)) as u8) << 3
+                                | ((stack.get(4).map(|(r, _)| r[idx]) == Some(color)) as u8) << 4
+                                | ((stack.get(5).map(|(r, _)| r[idx]) == Some(color)) as u8) << 5
+                        };
                         let char = num2six(bits);
                         stack_string.push(char);
                     }
