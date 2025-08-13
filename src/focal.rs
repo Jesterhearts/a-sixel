@@ -98,7 +98,6 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
     const NAME: &'static str = "Focal";
     const PALETTE_SIZE: usize = PALETTE_SIZE;
 
-    #[inline(never)]
     fn build_palette(image: &RgbImage) -> Vec<Lab> {
         let image_width = image.width();
         let image_height = image.height();
@@ -531,11 +530,14 @@ fn compute_saliency(
     image_height: u32,
     window_radius: u32,
 ) -> Saliency {
-    let buffer = {
-        let fft_row = planner.plan_fft_forward(image_width as usize);
-        let fft_col = planner.plan_fft_forward(image_height as usize);
+    let image_width_p2 = image_width.next_power_of_two();
+    let image_height_p2 = image_height.next_power_of_two();
 
-        let mut buffer = vec![Complex::zero(); channel_values.len()];
+    let buffer = {
+        let fft_row = planner.plan_fft_forward(image_width_p2 as usize);
+        let fft_col = planner.plan_fft_forward(image_height_p2 as usize);
+
+        let mut buffer = vec![Complex::zero(); image_width_p2 as usize * image_height_p2 as usize];
         channel_values
             .par_iter()
             .copied()
@@ -545,39 +547,39 @@ fn compute_saliency(
             });
 
         buffer
-            .par_chunks_mut(image_width as usize)
+            .par_chunks_mut(image_width_p2 as usize)
             .for_each(|chunk| {
                 fft_row.process(chunk);
             });
 
         let mut transpose = vec![Complex::zero(); buffer.len()];
-        (0..image_width as usize)
+        (0..image_width_p2 as usize)
             .into_par_iter()
-            .zip(transpose.par_chunks_mut(image_height as usize))
+            .zip(transpose.par_chunks_mut(image_height_p2 as usize))
             .for_each(|(x, col)| {
-                (0..image_height as usize)
+                (0..image_height_p2 as usize)
                     .into_par_iter()
                     .zip(col)
                     .for_each(|(y, dest)| {
-                        *dest = buffer[y * image_width as usize + x];
+                        *dest = buffer[y * image_width_p2 as usize + x];
                     });
             });
 
         transpose
-            .par_chunks_mut(image_height as usize)
+            .par_chunks_mut(image_height_p2 as usize)
             .for_each(|chunk| {
                 fft_col.process(chunk);
             });
 
-        (0..image_height as usize)
+        (0..image_height_p2 as usize)
             .into_par_iter()
-            .zip(buffer.par_chunks_mut(image_width as usize))
+            .zip(buffer.par_chunks_mut(image_width_p2 as usize))
             .for_each(|(y, row)| {
-                (0..image_width as usize)
+                (0..image_width_p2 as usize)
                     .into_par_iter()
                     .zip(row)
                     .for_each(|(x, dest)| {
-                        *dest = transpose[x * image_height as usize + y];
+                        *dest = transpose[x * image_height_p2 as usize + y];
                     });
             });
 
@@ -592,7 +594,7 @@ fn compute_saliency(
         .for_each(|(c, dest)| *dest = c.norm());
 
     let pft = {
-        let mut ifft_buffer = vec![Complex::zero(); buffer.len()];
+        let mut ifft_buffer = vec![Complex::zero(); buffer.len().next_power_of_two()];
 
         amplitude
             .par_iter()
@@ -606,43 +608,43 @@ fn compute_saliency(
                 };
             });
 
-        let ifft_row = planner.plan_fft_inverse(image_width as usize);
-        let ifft_col = planner.plan_fft_inverse(image_height as usize);
+        let ifft_row = planner.plan_fft_inverse(image_width_p2.next_power_of_two() as usize);
+        let ifft_col = planner.plan_fft_inverse(image_height_p2.next_power_of_two() as usize);
 
         ifft_buffer
-            .par_chunks_mut(image_height as usize)
+            .par_chunks_mut(image_width_p2 as usize)
             .for_each(|chunk| {
                 ifft_col.process(chunk);
             });
 
         let mut transpose = vec![Complex::zero(); ifft_buffer.len()];
-        (0..image_width as usize)
+        (0..image_width_p2 as usize)
             .into_par_iter()
-            .zip(transpose.par_chunks_mut(image_height as usize))
+            .zip(transpose.par_chunks_mut(image_height_p2 as usize))
             .for_each(|(x, col)| {
-                (0..image_height as usize)
+                (0..image_height_p2 as usize)
                     .into_par_iter()
                     .zip(col)
                     .for_each(|(y, dest)| {
-                        *dest = ifft_buffer[y * image_width as usize + x];
+                        *dest = ifft_buffer[y * image_width_p2 as usize + x];
                     });
             });
 
         transpose
-            .par_chunks_mut(image_height as usize)
+            .par_chunks_mut(image_width_p2 as usize)
             .for_each(|chunk| {
                 ifft_row.process(chunk);
             });
 
-        (0..image_height as usize)
+        (0..image_height_p2 as usize)
             .into_par_iter()
-            .zip(ifft_buffer.par_chunks_mut(image_width as usize))
+            .zip(ifft_buffer.par_chunks_mut(image_width_p2 as usize))
             .for_each(|(y, row)| {
-                (0..image_width as usize)
+                (0..image_width_p2 as usize)
                     .into_par_iter()
                     .zip(row)
                     .for_each(|(x, dest)| {
-                        *dest = transpose[x * image_height as usize + y];
+                        *dest = transpose[x * image_height_p2 as usize + y];
                     });
             });
 
@@ -655,8 +657,12 @@ fn compute_saliency(
             .for_each(|(c, dest)| *dest = c.norm_sqr());
 
         {
-            let mut pft =
-                BlurImageMut::borrow(&mut pft, image_width, image_height, FastBlurChannels::Plane);
+            let mut pft = BlurImageMut::borrow(
+                &mut pft,
+                image_width_p2,
+                image_height_p2,
+                FastBlurChannels::Plane,
+            );
             stack_blur_f32(
                 &mut pft,
                 AnisotropicRadius::new(window_radius),
@@ -708,42 +714,42 @@ fn compute_saliency(
                 };
             });
 
-        let ifft_row = planner.plan_fft_inverse(image_width as usize);
-        let ifft_col = planner.plan_fft_inverse(image_height as usize);
+        let ifft_row = planner.plan_fft_inverse(image_width_p2 as usize);
+        let ifft_col = planner.plan_fft_inverse(image_height_p2 as usize);
         ifft_buffer
-            .par_chunks_mut(image_height as usize)
+            .par_chunks_mut(image_height_p2 as usize)
             .for_each(|chunk| {
                 ifft_col.process(chunk);
             });
 
         let mut transpose = vec![Complex::zero(); ifft_buffer.len()];
-        (0..image_width as usize)
+        (0..image_width_p2 as usize)
             .into_par_iter()
-            .zip(transpose.par_chunks_mut(image_height as usize))
+            .zip(transpose.par_chunks_mut(image_height_p2 as usize))
             .for_each(|(x, col)| {
-                (0..image_height as usize)
+                (0..image_height_p2 as usize)
                     .into_par_iter()
                     .zip(col)
                     .for_each(|(y, dest)| {
-                        *dest = ifft_buffer[y * image_width as usize + x];
+                        *dest = ifft_buffer[y * image_width_p2 as usize + x];
                     });
             });
 
         transpose
-            .par_chunks_mut(image_height as usize)
+            .par_chunks_mut(image_width_p2 as usize)
             .for_each(|chunk| {
                 ifft_row.process(chunk);
             });
 
-        (0..image_height as usize)
+        (0..image_height_p2 as usize)
             .into_par_iter()
-            .zip(ifft_buffer.par_chunks_mut(image_width as usize))
+            .zip(ifft_buffer.par_chunks_mut(image_width_p2 as usize))
             .for_each(|(y, row)| {
-                (0..image_width as usize)
+                (0..image_width_p2 as usize)
                     .into_par_iter()
                     .zip(row)
                     .for_each(|(x, dest)| {
-                        *dest = transpose[x * image_height as usize + y];
+                        *dest = transpose[x * image_height_p2 as usize + y];
                     });
             });
 
@@ -755,8 +761,12 @@ fn compute_saliency(
             .for_each(|(c, dest)| *dest = c.norm_sqr());
 
         {
-            let mut asr =
-                BlurImageMut::borrow(&mut asr, image_width, image_height, FastBlurChannels::Plane);
+            let mut asr = BlurImageMut::borrow(
+                &mut asr,
+                image_width_p2,
+                image_height_p2,
+                FastBlurChannels::Plane,
+            );
             stack_blur_f32(
                 &mut asr,
                 AnisotropicRadius::new(window_radius),
@@ -786,8 +796,8 @@ fn compute_saliency(
         {
             let mut amplitude = BlurImageMut::borrow(
                 &mut log_blurred,
-                image_width,
-                image_height,
+                image_width_p2,
+                image_height_p2,
                 FastBlurChannels::Plane,
             );
             stack_blur_f32(
@@ -798,7 +808,7 @@ fn compute_saliency(
             .unwrap();
         }
 
-        let mut residual = vec![0.0f32; image_width as usize * image_height as usize];
+        let mut residual = vec![0.0f32; image_width_p2 as usize * image_height_p2 as usize];
         log_amplitude
             .into_par_iter()
             .zip(log_blurred)
@@ -808,8 +818,8 @@ fn compute_saliency(
             });
 
         let sr_buffer = {
-            let ifft_row = planner.plan_fft_inverse(image_width as usize);
-            let ifft_col = planner.plan_fft_inverse(image_height as usize);
+            let ifft_row = planner.plan_fft_inverse(image_width_p2 as usize);
+            let ifft_col = planner.plan_fft_inverse(image_height_p2 as usize);
 
             let mut buffer = vec![Complex::zero(); residual.len()];
             residual
@@ -824,46 +834,46 @@ fn compute_saliency(
                 });
 
             buffer
-                .par_chunks_mut(image_height as usize)
+                .par_chunks_mut(image_height_p2 as usize)
                 .for_each(|chunk| {
                     ifft_col.process(chunk);
                 });
 
             let mut transpose = vec![Complex::zero(); buffer.len()];
-            (0..image_width as usize)
+            (0..image_width_p2 as usize)
                 .into_par_iter()
-                .zip(transpose.par_chunks_mut(image_height as usize))
+                .zip(transpose.par_chunks_mut(image_height_p2 as usize))
                 .for_each(|(x, col)| {
-                    (0..image_height as usize)
+                    (0..image_height_p2 as usize)
                         .into_par_iter()
                         .zip(col)
                         .for_each(|(y, dest)| {
-                            *dest = buffer[y * image_width as usize + x];
+                            *dest = buffer[y * image_width_p2 as usize + x];
                         });
                 });
 
             transpose
-                .par_chunks_mut(image_height as usize)
+                .par_chunks_mut(image_width_p2 as usize)
                 .for_each(|chunk| {
                     ifft_row.process(chunk);
                 });
 
-            (0..image_height as usize)
+            (0..image_height_p2 as usize)
                 .into_par_iter()
-                .zip(buffer.par_chunks_mut(image_width as usize))
+                .zip(buffer.par_chunks_mut(image_width_p2 as usize))
                 .for_each(|(y, row)| {
-                    (0..image_width as usize)
+                    (0..image_width_p2 as usize)
                         .into_par_iter()
                         .zip(row)
                         .for_each(|(x, dest)| {
-                            *dest = transpose[x * image_height as usize + y];
+                            *dest = transpose[x * image_height_p2 as usize + y];
                         });
                 });
 
             transpose
         };
 
-        let mut saliency = vec![0.0f32; image_width as usize * image_height as usize];
+        let mut saliency = vec![0.0f32; image_width_p2 as usize * image_height_p2 as usize];
         sr_buffer
             .into_par_iter()
             .zip(&mut saliency)
@@ -872,8 +882,8 @@ fn compute_saliency(
         {
             let mut saliency = BlurImageMut::borrow(
                 &mut saliency,
-                image_width,
-                image_height,
+                image_width_p2,
+                image_height_p2,
                 FastBlurChannels::Plane,
             );
             stack_blur_f32(
@@ -905,8 +915,8 @@ fn compute_saliency(
         {
             let mut amplitude = BlurImageMut::borrow(
                 &mut log_blurred,
-                image_width,
-                image_height,
+                image_width_p2,
+                image_height_p2,
                 FastBlurChannels::Plane,
             );
             stack_blur_f32(
@@ -917,7 +927,7 @@ fn compute_saliency(
             .unwrap();
         }
 
-        let mut residual = vec![0.0f32; image_width as usize * image_height as usize];
+        let mut residual = vec![0.0f32; image_width_p2 as usize * image_height_p2 as usize];
         log_amplitude
             .into_par_iter()
             .zip(log_blurred)
@@ -952,42 +962,42 @@ fn compute_saliency(
                 };
             });
 
-        let ifft_row = planner.plan_fft_inverse(image_width as usize);
-        let ifft_col = planner.plan_fft_inverse(image_height as usize);
+        let ifft_row = planner.plan_fft_inverse(image_width_p2 as usize);
+        let ifft_col = planner.plan_fft_inverse(image_height_p2 as usize);
         msr_buffer
-            .par_chunks_mut(image_height as usize)
+            .par_chunks_mut(image_height_p2 as usize)
             .for_each(|chunk| {
                 ifft_col.process(chunk);
             });
 
         let mut transpose = vec![Complex::zero(); msr_buffer.len()];
-        (0..image_width as usize)
+        (0..image_width_p2 as usize)
             .into_par_iter()
-            .zip(transpose.par_chunks_mut(image_height as usize))
+            .zip(transpose.par_chunks_mut(image_height_p2 as usize))
             .for_each(|(x, col)| {
-                (0..image_height as usize)
+                (0..image_height_p2 as usize)
                     .into_par_iter()
                     .zip(col)
                     .for_each(|(y, dest)| {
-                        *dest = msr_buffer[y * image_width as usize + x];
+                        *dest = msr_buffer[y * image_width_p2 as usize + x];
                     });
             });
 
         transpose
-            .par_chunks_mut(image_height as usize)
+            .par_chunks_mut(image_width_p2 as usize)
             .for_each(|chunk| {
                 ifft_row.process(chunk);
             });
 
-        (0..image_height as usize)
+        (0..image_height_p2 as usize)
             .into_par_iter()
-            .zip(msr_buffer.par_chunks_mut(image_width as usize))
+            .zip(msr_buffer.par_chunks_mut(image_width_p2 as usize))
             .for_each(|(y, row)| {
-                (0..image_width as usize)
+                (0..image_width_p2 as usize)
                     .into_par_iter()
                     .zip(row)
                     .for_each(|(x, dest)| {
-                        *dest = transpose[x * image_height as usize + y];
+                        *dest = transpose[x * image_height_p2 as usize + y];
                     });
             });
 
@@ -999,8 +1009,12 @@ fn compute_saliency(
             .for_each(|(c, dest)| *dest = c.norm_sqr());
 
         {
-            let mut msr =
-                BlurImageMut::borrow(&mut msr, image_width, image_height, FastBlurChannels::Plane);
+            let mut msr = BlurImageMut::borrow(
+                &mut msr,
+                image_width_p2,
+                image_height_p2,
+                FastBlurChannels::Plane,
+            );
             stack_blur_f32(
                 &mut msr,
                 AnisotropicRadius::new(window_radius),
@@ -1016,6 +1030,58 @@ fn compute_saliency(
         });
 
         msr
+    };
+
+    let sr = if image_height_p2 != image_height || image_width_p2 != image_width {
+        let mut sr_out = vec![0.0f32; image_height as usize * image_width as usize];
+        for y in 0..image_height as usize {
+            for x in 0..image_width as usize {
+                let idx = y * image_width_p2 as usize + x;
+                sr_out[y * image_width as usize + x] = sr[idx];
+            }
+        }
+        sr_out
+    } else {
+        sr
+    };
+
+    let msr = if image_height_p2 != image_height || image_width_p2 != image_width {
+        let mut msr_out = vec![0.0f32; image_height as usize * image_width as usize];
+        for y in 0..image_height as usize {
+            for x in 0..image_width as usize {
+                let idx = y * image_width_p2 as usize + x;
+                msr_out[y * image_width as usize + x] = msr[idx];
+            }
+        }
+        msr_out
+    } else {
+        msr
+    };
+
+    let pft = if image_height_p2 != image_height || image_width_p2 != image_width {
+        let mut pft_out = vec![0.0f32; image_height as usize * image_width as usize];
+        for y in 0..image_height as usize {
+            for x in 0..image_width as usize {
+                let idx = y * image_width_p2 as usize + x;
+                pft_out[y * image_width as usize + x] = pft[idx];
+            }
+        }
+        pft_out
+    } else {
+        pft
+    };
+
+    let asr = if image_height_p2 != image_height || image_width_p2 != image_width {
+        let mut asr_out = vec![0.0f32; image_height as usize * image_width as usize];
+        for y in 0..image_height as usize {
+            for x in 0..image_width as usize {
+                let idx = y * image_width_p2 as usize + x;
+                asr_out[y * image_width as usize + x] = asr[idx];
+            }
+        }
+        asr_out
+    } else {
+        asr
     };
 
     Saliency {
@@ -1254,5 +1320,32 @@ pub(crate) fn o_means<const PALETTE_SIZE: usize>(mut candidates: Vec<(Lab, f32)>
         final_clusters.into_iter().map(|(c, _)| c).collect()
     } else {
         parallel_kmeans::<PALETTE_SIZE>(&final_clusters).0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn non_square_non_p2_image() {
+        let mut planner = FftPlanner::<f32>::new();
+        let channel_values = vec![0.5; 122 * 64];
+        let image_width = 122;
+        let image_height = 64;
+        let window_radius = 3;
+
+        let saliency: Saliency = compute_saliency(
+            &mut planner,
+            &channel_values,
+            image_width,
+            image_height,
+            window_radius,
+        );
+
+        assert_eq!(saliency.spectral_residual.len(), channel_values.len());
+        assert_eq!(saliency.mod_spectral_residual.len(), channel_values.len());
+        assert_eq!(saliency.phase_spectrum.len(), channel_values.len());
+        assert_eq!(saliency.amplitude_spectrum.len(), channel_values.len());
     }
 }
