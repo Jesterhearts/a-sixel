@@ -25,7 +25,6 @@
 //!    distance.
 
 use std::{
-    array,
     f32::consts::PI,
     sync::atomic::Ordering,
 };
@@ -36,21 +35,21 @@ use image::{
     RgbImage,
 };
 use kiddo::{
-    float::kdtree::KdTree,
     SquaredEuclidean,
+    float::kdtree::KdTree,
 };
 use libblur::{
-    stack_blur_f32,
     AnisotropicRadius,
     BlurImageMut,
     FastBlurChannels,
     ThreadingPolicy,
+    stack_blur_f32,
 };
 use palette::{
-    color_difference::EuclideanDistance,
     IntoColor,
     Lab,
     Srgb,
+    color_difference::EuclideanDistance,
 };
 use rayon::{
     iter::{
@@ -66,39 +65,27 @@ use rayon::{
     },
 };
 use rustfft::{
+    FftPlanner,
     num_complex::Complex,
     num_traits::Zero,
-    FftPlanner,
 };
 
 use crate::{
-    dither::Sierra,
+    BitPaletteBuilder,
+    PaletteBuilder,
     kmeans::parallel_kmeans,
     private,
     rgb_to_lab,
-    BitPaletteBuilder,
-    PaletteBuilder,
-    SixelEncoder,
 };
 
-pub type FocalSixelEncoderMono<D = Sierra> = SixelEncoder<FocalPaletteBuilder<2>, D>;
-pub type FocalSixelEncoder4<D = Sierra> = SixelEncoder<FocalPaletteBuilder<4>, D>;
-pub type FocalSixelEncoder8<D = Sierra> = SixelEncoder<FocalPaletteBuilder<8>, D>;
-pub type FocalSixelEncoder16<D = Sierra> = SixelEncoder<FocalPaletteBuilder<16>, D>;
-pub type FocalSixelEncoder32<D = Sierra> = SixelEncoder<FocalPaletteBuilder<32>, D>;
-pub type FocalSixelEncoder64<D = Sierra> = SixelEncoder<FocalPaletteBuilder<64>, D>;
-pub type FocalSixelEncoder128<D = Sierra> = SixelEncoder<FocalPaletteBuilder<128>, D>;
-pub type FocalSixelEncoder256<D = Sierra> = SixelEncoder<FocalPaletteBuilder<256>, D>;
+pub struct FocalPaletteBuilder;
 
-pub struct FocalPaletteBuilder<const PALETTE_SIZE: usize = 256>;
+impl private::Sealed for FocalPaletteBuilder {}
 
-impl<const PALETTE_SIZE: usize> private::Sealed for FocalPaletteBuilder<PALETTE_SIZE> {}
-
-impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_SIZE> {
+impl PaletteBuilder for FocalPaletteBuilder {
     const NAME: &'static str = "Focal";
-    const PALETTE_SIZE: usize = PALETTE_SIZE;
 
-    fn build_palette(image: &RgbImage) -> Vec<Lab> {
+    fn build_palette(image: &RgbImage, palette_size: usize) -> Vec<Lab> {
         let image_width = image.width();
         let image_height = image.height();
         let image = image.to_vec();
@@ -512,7 +499,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for FocalPaletteBuilder<PALETTE_S
             dump_intermediate("candidates", &quant_candidates, image_width, image_height);
         }
 
-        o_means::<PALETTE_SIZE>(candidates)
+        o_means(candidates, palette_size)
     }
 }
 
@@ -1116,7 +1103,7 @@ fn dump_intermediate(name: &str, buffer: &[u8], width: u32, height: u32) {
     .unwrap()
 }
 
-pub(crate) fn o_means<const PALETTE_SIZE: usize>(mut candidates: Vec<(Lab, f32)>) -> Vec<Lab> {
+pub(crate) fn o_means(mut candidates: Vec<(Lab, f32)>, palette_size: usize) -> Vec<Lab> {
     let mut final_clusters = vec![];
 
     loop {
@@ -1139,7 +1126,7 @@ pub(crate) fn o_means<const PALETTE_SIZE: usize>(mut candidates: Vec<(Lab, f32)>
 
         let sigma = var_dist.sqrt() * 2.0;
 
-        let summaries = array::from_fn::<_, PALETTE_SIZE, _>(|_| {
+        let summaries = std::iter::repeat_with(|| {
             (
                 [
                     AtomicF32::new(0.0),
@@ -1148,11 +1135,14 @@ pub(crate) fn o_means<const PALETTE_SIZE: usize>(mut candidates: Vec<(Lab, f32)>
                 ],
                 AtomicF32::new(0.0),
             )
-        });
+        })
+        .take(palette_size)
+        .collect::<Vec<_>>();
 
+        let shift = BitPaletteBuilder::shift(palette_size);
         candidates.par_iter().copied().for_each(|(color, weight)| {
             let rgb: Srgb = color.into_color();
-            let slot = BitPaletteBuilder::<PALETTE_SIZE>::index(rgb.into_format());
+            let slot = BitPaletteBuilder::index(rgb.into_format(), shift);
             summaries[slot].0[0].fetch_add(rgb.red * weight, Ordering::Relaxed);
             summaries[slot].0[1].fetch_add(rgb.green * weight, Ordering::Relaxed);
             summaries[slot].0[2].fetch_add(rgb.blue * weight, Ordering::Relaxed);
@@ -1189,7 +1179,7 @@ pub(crate) fn o_means<const PALETTE_SIZE: usize>(mut candidates: Vec<(Lab, f32)>
                 }
             });
 
-        let cluster_means = array::from_fn::<_, PALETTE_SIZE, _>(|_| {
+        let cluster_means = std::iter::repeat_with(|| {
             (
                 [
                     AtomicF32::new(0.0),
@@ -1198,7 +1188,9 @@ pub(crate) fn o_means<const PALETTE_SIZE: usize>(mut candidates: Vec<(Lab, f32)>
                 ],
                 AtomicF32::new(0.0),
             )
-        });
+        })
+        .take(palette_size)
+        .collect::<Vec<_>>();
 
         cluster_assignments
             .par_iter()
@@ -1305,7 +1297,7 @@ pub(crate) fn o_means<const PALETTE_SIZE: usize>(mut candidates: Vec<(Lab, f32)>
         let outliers = cluster_assignments
             .iter()
             .enumerate()
-            .filter(|(_, &cluster)| cluster < 0)
+            .filter(|(_, cluster)| **cluster < 0)
             .map(|(i, _)| candidates[i])
             .collect::<Vec<_>>();
 
@@ -1316,10 +1308,10 @@ pub(crate) fn o_means<const PALETTE_SIZE: usize>(mut candidates: Vec<(Lab, f32)>
         candidates = outliers;
     }
 
-    if final_clusters.len() <= PALETTE_SIZE {
+    if final_clusters.len() <= palette_size {
         final_clusters.into_iter().map(|(c, _)| c).collect()
     } else {
-        parallel_kmeans::<PALETTE_SIZE>(&final_clusters).0
+        parallel_kmeans(&final_clusters, palette_size).0
     }
 }
 

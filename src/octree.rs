@@ -31,28 +31,9 @@ use rayon::iter::{
 };
 
 use crate::{
-    dither::Sierra,
-    private,
     PaletteBuilder,
-    SixelEncoder,
+    private,
 };
-
-pub type OctreeSixelEncoderMono<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<2, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder4<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<4, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder8<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<8, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder16<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<16, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder32<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<32, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder64<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<64, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder128<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<128, USE_MIN_HEAP>, D>;
-pub type OctreeSixelEncoder256<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<256, USE_MIN_HEAP>, D>;
 
 #[derive(Debug, Clone, Copy)]
 struct Node {
@@ -86,13 +67,11 @@ impl<const MIN: bool> Ord for Candidate<MIN> {
 }
 
 #[derive(Debug)]
-pub struct OctreePaletteBuilder<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool = false> {
+pub struct OctreePaletteBuilder<const USE_MIN_HEAP: bool = false> {
     nodes: Vec<Node>,
 }
 
-impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool>
-    OctreePaletteBuilder<PALETTE_SIZE, USE_MIN_HEAP>
-{
+impl<const USE_MIN_HEAP: bool> OctreePaletteBuilder<USE_MIN_HEAP> {
     fn new() -> Self {
         OctreePaletteBuilder {
             nodes: vec![Node {
@@ -143,18 +122,12 @@ impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool>
     }
 }
 
-impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool> private::Sealed
-    for OctreePaletteBuilder<PALETTE_SIZE, USE_MIN_HEAP>
-{
-}
-impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool> PaletteBuilder
-    for OctreePaletteBuilder<PALETTE_SIZE, USE_MIN_HEAP>
-{
+impl<const USE_MIN_HEAP: bool> private::Sealed for OctreePaletteBuilder<USE_MIN_HEAP> {}
+impl<const USE_MIN_HEAP: bool> PaletteBuilder for OctreePaletteBuilder<USE_MIN_HEAP> {
     const NAME: &'static str = "Octree";
-    const PALETTE_SIZE: usize = PALETTE_SIZE;
 
-    fn build_palette(image: &image::RgbImage) -> Vec<palette::Lab> {
-        let mut octree = OctreePaletteBuilder::<PALETTE_SIZE>::new();
+    fn build_palette(image: &image::RgbImage, palette_size: usize) -> Vec<palette::Lab> {
+        let mut octree = OctreePaletteBuilder::<USE_MIN_HEAP>::new();
 
         for pixel in image.pixels() {
             octree.insert(Srgb::<u8>::new(pixel[0], pixel[1], pixel[2]));
@@ -173,7 +146,7 @@ impl<const PALETTE_SIZE: usize, const USE_MIN_HEAP: bool> PaletteBuilder
             })
             .collect::<BinaryHeap<_>>();
 
-        while candidate_merges.len() > Self::PALETTE_SIZE {
+        while candidate_merges.len() > palette_size {
             let Some(min_candidate) = candidate_merges.pop() else {
                 break;
             };

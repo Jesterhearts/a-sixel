@@ -8,18 +8,13 @@
 //! - THETA = (400 * 256^0.5) = 6400
 //! - STEPS = (2 * 256 - 3) * THETA = 3257600
 //! - GAMMA = 0.015 or GAMMA_DIV ~= 64
-//!
-//! as is specified by the default arguments to this struct.
-//!
-//! See the code for the type aliases (e.g. [`ADUSixelEncoder16`]) for more
-//! default parameters.
 
 use std::collections::HashSet;
 
 use image::RgbImage;
 use kiddo::{
-    float::kdtree::KdTree,
     SquaredEuclidean,
+    float::kdtree::KdTree,
 };
 use ordered_float::OrderedFloat;
 use palette::Lab;
@@ -30,41 +25,22 @@ use rayon::iter::{
 use sobol_burley::sample_4d;
 
 use crate::{
-    dither::Sierra,
+    PaletteBuilder,
     private,
     rgb_to_lab,
-    PaletteBuilder,
-    SixelEncoder,
 };
 
-pub type ADUSixelEncoderMono<D = Sierra> = SixelEncoder<ADUPaletteBuilder<2, 400, 400>, D>;
-pub type ADUSixelEncoder4<D = Sierra> = SixelEncoder<ADUPaletteBuilder<4, 800, 4000>, D>;
-pub type ADUSixelEncoder8<D = Sierra> = SixelEncoder<ADUPaletteBuilder<8, 1131, 14703>, D>;
-pub type ADUSixelEncoder16<D = Sierra> = SixelEncoder<ADUPaletteBuilder<16, 1600, 46400>, D>;
-pub type ADUSixelEncoder32<D = Sierra> = SixelEncoder<ADUPaletteBuilder<32, 2262, 137982>, D>;
-pub type ADUSixelEncoder64<D = Sierra> = SixelEncoder<ADUPaletteBuilder<64, 3200, 400000>, D>;
-pub type ADUSixelEncoder128<D = Sierra> = SixelEncoder<ADUPaletteBuilder<128, 4525, 1144947>, D>;
-pub type ADUSixelEncoder256<D = Sierra> = SixelEncoder<ADUPaletteBuilder<256>, D>;
+pub struct ADUPaletteBuilder;
 
-pub struct ADUPaletteBuilder<
-    const PALETTE_SIZE: usize = 256,
-    const THETA: usize = 6400,
-    const STEPS: usize = 3257600,
-    const GAMMA_DIV: usize = 64,
->;
-
-impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize, const GAMMA_DIV: usize>
-    private::Sealed for ADUPaletteBuilder<PALETTE_SIZE, THETA, STEPS, GAMMA_DIV>
-{
-}
-impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize, const GAMMA_DIV: usize>
-    PaletteBuilder for ADUPaletteBuilder<PALETTE_SIZE, THETA, STEPS, GAMMA_DIV>
-{
+impl private::Sealed for ADUPaletteBuilder {}
+impl PaletteBuilder for ADUPaletteBuilder {
     const NAME: &'static str = "ADU";
-    const PALETTE_SIZE: usize = PALETTE_SIZE;
 
-    fn build_palette(image: &RgbImage) -> Vec<Lab> {
-        let gamma: f32 = 1.0 / (GAMMA_DIV as f32);
+    fn build_palette(image: &RgbImage, palette_size: usize) -> Vec<Lab> {
+        let theta = (400.0 * (palette_size as f32).sqrt()) as usize;
+        let steps = ((2 * palette_size).max(4) - 3) * theta;
+
+        let gamma: f32 = 1.0 / 64.0;
 
         let candidates = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
 
@@ -78,16 +54,16 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize, const GA
             },
         ) / candidates.len() as f32;
 
-        let mut palette = [centroid; PALETTE_SIZE];
+        let mut palette = vec![centroid; palette_size];
 
-        let mut tree = KdTree::<_, _, 3, PALETTE_SIZE, u32>::with_capacity(PALETTE_SIZE);
+        let mut tree = KdTree::<_, _, 3, 257, u32>::with_capacity(palette_size);
         tree.add(&[palette[0].l, palette[0].a, palette[0].b], 0);
 
         let mut next_idx = 1;
 
-        let mut wc = [0; PALETTE_SIZE];
+        let mut wc = vec![0; palette_size];
 
-        let candidates = (0..STEPS as u32 / 4)
+        let candidates = (0..steps as u32 / 4)
             .flat_map(|idx| {
                 let [x, y, z, w] = sample_4d(idx % (1 << 16), 0, idx / (1 << 16));
                 [
@@ -127,7 +103,7 @@ impl<const PALETTE_SIZE: usize, const THETA: usize, const STEPS: usize, const GA
 
             wc[winner.item] += 1;
 
-            if wc[winner.item] >= THETA && next_idx < PALETTE_SIZE {
+            if wc[winner.item] >= theta && next_idx < palette_size {
                 tree.add(&[candidate.l, candidate.a, candidate.b], next_idx);
 
                 wc[winner.item] = 0;

@@ -24,36 +24,24 @@ use rayon::{
 };
 
 use crate::{
-    dither::Sierra,
+    PaletteBuilder,
     private,
     rgb_to_lab,
-    PaletteBuilder,
-    SixelEncoder,
 };
 
-pub type MedianCutSixelEncoderMono<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<2>, D>;
-pub type MedianCutSixelEncoder4<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<4>, D>;
-pub type MedianCutSixelEncoder8<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<8>, D>;
-pub type MedianCutSixelEncoder16<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<16>, D>;
-pub type MedianCutSixelEncoder32<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<32>, D>;
-pub type MedianCutSixelEncoder64<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<64>, D>;
-pub type MedianCutSixelEncoder128<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<128>, D>;
-pub type MedianCutSixelEncoder256<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder<256>, D>;
-
-pub struct MedianCutPaletteBuilder<const PALETTE_SIZE: usize = 256>;
-impl<const PALETTE_SIZE: usize> private::Sealed for MedianCutPaletteBuilder<PALETTE_SIZE> {}
-impl<const PALETTE_SIZE: usize> PaletteBuilder for MedianCutPaletteBuilder<PALETTE_SIZE> {
+pub struct MedianCutPaletteBuilder;
+impl private::Sealed for MedianCutPaletteBuilder {}
+impl PaletteBuilder for MedianCutPaletteBuilder {
     const NAME: &'static str = "Median-Cut";
-    const PALETTE_SIZE: usize = PALETTE_SIZE;
 
-    fn build_palette(image: &RgbImage) -> Vec<Lab> {
+    fn build_palette(image: &RgbImage, palette_size: usize) -> Vec<Lab> {
         let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
 
-        let mut buckets = Vec::with_capacity(PALETTE_SIZE);
+        let mut buckets = Vec::with_capacity(palette_size);
         buckets.push(pixels);
-        let mut bucket_stats = vec![None; PALETTE_SIZE + 1];
+        let mut bucket_stats = vec![None; palette_size + 1];
 
-        for _ in 0..PALETTE_SIZE - 1 {
+        for _ in 0..palette_size - 1 {
             let (best_bucket, max_idx, _) = buckets
                 .par_iter()
                 .zip(bucket_stats.par_iter_mut())
@@ -103,11 +91,7 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for MedianCutPaletteBuilder<PALET
                 .reduce(
                     || (0, 0, 0.0),
                     |a, b| {
-                        if a.2 > b.2 {
-                            a
-                        } else {
-                            b
-                        }
+                        if a.2 > b.2 { a } else { b }
                     },
                 );
 

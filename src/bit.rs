@@ -20,20 +20,9 @@ use palette::{
 use rayon::iter::ParallelIterator;
 
 use crate::{
-    dither::Sierra,
-    private,
     PaletteBuilder,
-    SixelEncoder,
+    private,
 };
-
-pub type BitSixelEncoderMono<D = Sierra> = SixelEncoder<BitPaletteBuilder<2>, D>;
-pub type BitSixelEncoder4<D = Sierra> = SixelEncoder<BitPaletteBuilder<4>, D>;
-pub type BitSixelEncoder8<D = Sierra> = SixelEncoder<BitPaletteBuilder<8>, D>;
-pub type BitSixelEncoder16<D = Sierra> = SixelEncoder<BitPaletteBuilder<16>, D>;
-pub type BitSixelEncoder32<D = Sierra> = SixelEncoder<BitPaletteBuilder<32>, D>;
-pub type BitSixelEncoder64<D = Sierra> = SixelEncoder<BitPaletteBuilder<64>, D>;
-pub type BitSixelEncoder128<D = Sierra> = SixelEncoder<BitPaletteBuilder<128>, D>;
-pub type BitSixelEncoder256<D = Sierra> = SixelEncoder<BitPaletteBuilder<256>, D>;
 
 #[derive(Debug)]
 pub(crate) struct Bucket {
@@ -41,29 +30,31 @@ pub(crate) struct Bucket {
     pub(crate) count: AtomicU64,
 }
 
-#[derive(Debug)]
-pub struct BitPaletteBuilder<const PALETTE_SIZE: usize> {
+pub struct BitPaletteBuilder {
     pub(crate) buckets: Vec<Bucket>,
+    pub(crate) shift: usize,
 }
 
-impl<const PALETTE_SIZE: usize> BitPaletteBuilder<PALETTE_SIZE> {
-    const PALETTE_DEPTH: usize = PALETTE_SIZE.ilog2() as usize;
-    const SHIFT: usize = 24 - Self::PALETTE_DEPTH;
-
-    pub(crate) fn new() -> Self {
+impl BitPaletteBuilder {
+    pub(crate) fn new(palette_size: usize) -> Self {
         BitPaletteBuilder {
             buckets: Vec::from_iter(
                 std::iter::repeat_with(|| Bucket {
                     color: (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0)),
                     count: AtomicU64::new(0),
                 })
-                .take(PALETTE_SIZE),
+                .take(palette_size),
             ),
+            shift: Self::shift(palette_size),
         }
     }
 
+    pub(crate) fn shift(palette_size: usize) -> usize {
+        24 - palette_size.ilog2() as usize
+    }
+
     pub(crate) fn insert(&self, color: Srgb<u8>) {
-        let index = Self::index(color);
+        let index = Self::index(color, self.shift);
         let node = &self.buckets[index];
         node.color.0.fetch_add(color.red as u64, Ordering::Relaxed);
         node.color
@@ -73,7 +64,7 @@ impl<const PALETTE_SIZE: usize> BitPaletteBuilder<PALETTE_SIZE> {
         node.count.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub(crate) fn index(color: Srgb<u8>) -> usize {
+    pub(crate) fn index(color: Srgb<u8>, shift: usize) -> usize {
         let r = color.red.dilate_expand::<3>().value();
         let g = color.green.dilate_expand::<3>().value();
         let b = color.blue.dilate_expand::<3>().value();
@@ -83,17 +74,17 @@ impl<const PALETTE_SIZE: usize> BitPaletteBuilder<PALETTE_SIZE> {
         // make a huge difference, but the theory is nice.
         let rgb = g << 2 | r << 1 | b;
 
-        (rgb >> Self::SHIFT) as usize
+        (rgb >> shift) as usize
     }
 }
 
-impl<const PALETTE_SIZE: usize> private::Sealed for BitPaletteBuilder<PALETTE_SIZE> {}
-impl<const PALETTE_SIZE: usize> PaletteBuilder for BitPaletteBuilder<PALETTE_SIZE> {
-    const NAME: &'static str = "Bit";
-    const PALETTE_SIZE: usize = PALETTE_SIZE;
+impl private::Sealed for BitPaletteBuilder {}
 
-    fn build_palette(image: &image::RgbImage) -> Vec<Lab> {
-        let builder = Self::new();
+impl PaletteBuilder for BitPaletteBuilder {
+    const NAME: &'static str = "Bit";
+
+    fn build_palette(image: &image::RgbImage, palette_size: usize) -> Vec<Lab> {
+        let builder = Self::new(palette_size);
 
         image.par_pixels().for_each(|pixel| {
             builder.insert(Srgb::<u8>::new(pixel[0], pixel[1], pixel[2]));

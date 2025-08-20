@@ -30,10 +30,10 @@ use std::{
 
 use ordered_float::OrderedFloat;
 use palette::{
-    color_difference::EuclideanDistance,
     IntoColor,
     Lab,
     Srgb,
+    color_difference::EuclideanDistance,
 };
 use rayon::iter::{
     IndexedParallelIterator,
@@ -43,58 +43,29 @@ use rayon::iter::{
 };
 
 use crate::{
-    dither::Sierra,
-    kmeans::parallel_kmeans,
-    private,
     BitPaletteBuilder,
     PaletteBuilder,
-    SixelEncoder,
+    kmeans::parallel_kmeans,
+    private,
 };
 
-pub type BitMergeSixelEncoderMono<D = Sierra, const LARGE: usize = { 1 << 18 }> =
-    SixelEncoder<BitMergePaletteBuilder<2, LARGE>, D>;
-pub type BitMergeSixelEncoder4<D = Sierra, const LARGE: usize = { 1 << 18 }> =
-    SixelEncoder<BitMergePaletteBuilder<4, LARGE>, D>;
-pub type BitMergeSixelEncoder8<D = Sierra, const LARGE: usize = { 1 << 18 }> =
-    SixelEncoder<BitMergePaletteBuilder<8, LARGE>, D>;
-pub type BitMergeSixelEncoder16<D = Sierra, const LARGE: usize = { 1 << 18 }> =
-    SixelEncoder<BitMergePaletteBuilder<16, LARGE>, D>;
-pub type BitMergeSixelEncoder32<D = Sierra, const LARGE: usize = { 1 << 18 }> =
-    SixelEncoder<BitMergePaletteBuilder<32, LARGE>, D>;
-pub type BitMergeSixelEncoder64<D = Sierra, const LARGE: usize = { 1 << 18 }> =
-    SixelEncoder<BitMergePaletteBuilder<64, LARGE>, D>;
-pub type BitMergeSixelEncoder128<D = Sierra, const LARGE: usize = { 1 << 18 }> =
-    SixelEncoder<BitMergePaletteBuilder<128, LARGE>, D>;
-pub type BitMergeSixelEncoder256<D = Sierra, const LARGE: usize = { 1 << 18 }> =
-    SixelEncoder<BitMergePaletteBuilder<256, LARGE>, D>;
-
 pub struct BitMergePaletteBuilder<
-    const TARGET_PALETTE_SIZE: usize,
-    const STAGE_1_PALETTE_SIZE: usize,
+    const STAGE_1_PALETTE_SIZE: usize = { 1 << 18 },
     const STAGE_2_PALETTE_SIZE: usize = 512,
 >;
 
-impl<
-        const TARGET_PALETTE_SIZE: usize,
-        const STAGE_1_PALETTE_SIZE: usize,
-        const STAGE_2_PALETTE_SIZE: usize,
-    > private::Sealed
-    for BitMergePaletteBuilder<TARGET_PALETTE_SIZE, STAGE_1_PALETTE_SIZE, STAGE_2_PALETTE_SIZE>
+impl<const STAGE_1_PALETTE_SIZE: usize, const STAGE_2_PALETTE_SIZE: usize> private::Sealed
+    for BitMergePaletteBuilder<STAGE_1_PALETTE_SIZE, STAGE_2_PALETTE_SIZE>
 {
 }
 
-impl<
-        const TARGET_PALETTE_SIZE: usize,
-        const STAGE_1_PALETTE_SIZE: usize,
-        const STAGE_2_PALETTE_SIZE: usize,
-    > PaletteBuilder
-    for BitMergePaletteBuilder<TARGET_PALETTE_SIZE, STAGE_1_PALETTE_SIZE, STAGE_2_PALETTE_SIZE>
+impl<const STAGE_1_PALETTE_SIZE: usize, const STAGE_2_PALETTE_SIZE: usize> PaletteBuilder
+    for BitMergePaletteBuilder<STAGE_1_PALETTE_SIZE, STAGE_2_PALETTE_SIZE>
 {
     const NAME: &'static str = "Bit-Merge";
-    const PALETTE_SIZE: usize = TARGET_PALETTE_SIZE;
 
-    fn build_palette(image: &image::RgbImage) -> Vec<palette::Lab> {
-        let bit = BitPaletteBuilder::<STAGE_1_PALETTE_SIZE>::new();
+    fn build_palette(image: &image::RgbImage, palette_size: usize) -> Vec<palette::Lab> {
+        let bit = BitPaletteBuilder::new(STAGE_1_PALETTE_SIZE);
         image.par_pixels().for_each(|pixel| {
             bit.insert(palette::Srgb::<u8>::new(pixel[0], pixel[1], pixel[2]));
         });
@@ -122,18 +93,20 @@ impl<
             .collect::<Vec<_>>();
 
         let (mut stage2_colors, mut stage2_counts) =
-            parallel_kmeans::<STAGE_2_PALETTE_SIZE>(&candidates);
+            parallel_kmeans(&candidates, STAGE_2_PALETTE_SIZE);
 
-        agglomerative_merge::<STAGE_2_PALETTE_SIZE, TARGET_PALETTE_SIZE>(
+        agglomerative_merge::<STAGE_2_PALETTE_SIZE>(
             &mut stage2_colors,
             &mut stage2_counts,
+            palette_size,
         )
     }
 }
 
-pub(crate) fn agglomerative_merge<const IN_SIZE: usize, const OUT_SIZE: usize>(
+pub(crate) fn agglomerative_merge<const IN_SIZE: usize>(
     stage2_colors: &mut [Lab],
     stage2_counts: &mut [f32],
+    out_size: usize,
 ) -> Vec<Lab> {
     let mut live_stage2_colors = stage2_colors.len();
     let mut bucket_generations = [0; IN_SIZE];
@@ -176,14 +149,14 @@ pub(crate) fn agglomerative_merge<const IN_SIZE: usize, const OUT_SIZE: usize>(
         pqueue.push(entry);
     }
 
-    while live_stage2_colors > OUT_SIZE {
+    while live_stage2_colors > out_size {
         let Some(PQueueEntry {
             idx1: (idx1, gen1),
             idx2: (idx2, gen2),
             ..
         }) = pqueue.pop()
         else {
-            assert!(live_stage2_colors <= OUT_SIZE);
+            assert!(live_stage2_colors <= out_size);
             break;
         };
         if bucket_generations[idx1] != gen1 || bucket_generations[idx2] != gen2 {

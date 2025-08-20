@@ -1,22 +1,19 @@
 //! Use k-means clustering to determine a palette for the image.
 
-use std::{
-    array,
-    sync::atomic::Ordering,
-};
+use std::sync::atomic::Ordering;
 
 use atomic_float::AtomicF32;
 use image::RgbImage;
 use kiddo::{
-    float::kdtree::KdTree,
     SquaredEuclidean,
+    float::kdtree::KdTree,
 };
 use ordered_float::OrderedFloat;
 use palette::{
-    color_difference::EuclideanDistance,
     IntoColor,
     Lab,
     Srgb,
+    color_difference::EuclideanDistance,
 };
 use rayon::iter::{
     IndexedParallelIterator,
@@ -25,33 +22,21 @@ use rayon::iter::{
 };
 
 use crate::{
-    dither::Sierra,
-    private,
-    rgb_to_lab,
     BitPaletteBuilder,
     PaletteBuilder,
-    SixelEncoder,
+    private,
+    rgb_to_lab,
 };
 
-pub type KMeansSixelEncoderMono<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<2>, D>;
-pub type KMeansSixelEncoder4<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<4>, D>;
-pub type KMeansSixelEncoder8<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<8>, D>;
-pub type KMeansSixelEncoder16<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<16>, D>;
-pub type KMeansSixelEncoder32<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<32>, D>;
-pub type KMeansSixelEncoder64<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<64>, D>;
-pub type KMeansSixelEncoder128<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<128>, D>;
-pub type KMeansSixelEncoder256<D = Sierra> = SixelEncoder<KMeansPaletteBuilder<256>, D>;
-
 /// Performs K-Means clustering on the image's pixels to build a palette.
-pub struct KMeansPaletteBuilder<const PALETTE_SIZE: usize>;
+pub struct KMeansPaletteBuilder;
 
-impl<const PALETTE_SIZE: usize> private::Sealed for KMeansPaletteBuilder<PALETTE_SIZE> {}
+impl private::Sealed for KMeansPaletteBuilder {}
 
-impl<const PALETTE_SIZE: usize> PaletteBuilder for KMeansPaletteBuilder<PALETTE_SIZE> {
+impl PaletteBuilder for KMeansPaletteBuilder {
     const NAME: &'static str = "K-Means";
-    const PALETTE_SIZE: usize = PALETTE_SIZE;
 
-    fn build_palette(image: &RgbImage) -> Vec<Lab> {
+    fn build_palette(image: &RgbImage, palette_size: usize) -> Vec<Lab> {
         let candidates = image
             .pixels()
             .copied()
@@ -59,14 +44,15 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for KMeansPaletteBuilder<PALETTE_
             .map(|c| (c, 1.0))
             .collect::<Vec<_>>();
 
-        parallel_kmeans::<PALETTE_SIZE>(&candidates).0
+        parallel_kmeans(&candidates, palette_size).0
     }
 }
 
-pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(
+pub(crate) fn parallel_kmeans(
     candidates: &[(Lab, f32)],
+    palette_size: usize,
 ) -> (Vec<Lab>, Vec<f32>) {
-    let mut centroids = KdTree::<_, _, 3, 1025, u32>::with_capacity(PALETTE_SIZE);
+    let mut centroids = KdTree::<_, _, 3, 1025, u32>::with_capacity(palette_size);
 
     const BUCKETS: usize = 1 << 14;
     let buckets = Vec::from_iter(
@@ -82,9 +68,11 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(
         })
         .take(BUCKETS),
     );
+
+    let shift = BitPaletteBuilder::shift(BUCKETS);
     candidates.par_iter().copied().for_each(|(color, w)| {
         let color: Srgb = color.into_color();
-        let index = BitPaletteBuilder::<BUCKETS>::index(color.into_format());
+        let index = BitPaletteBuilder::index(color.into_format(), shift);
         buckets[index].0[0].fetch_add(color.red as f32 * w, Ordering::Relaxed);
         buckets[index].0[1].fetch_add(color.green as f32 * w, Ordering::Relaxed);
         buckets[index].0[2].fetch_add(color.blue as f32 * w, Ordering::Relaxed);
@@ -137,7 +125,7 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(
     let lab: Lab = rgb.into_color();
     centroids.add(&[lab.l, lab.a, lab.b], 0);
 
-    for idx in 1..PALETTE_SIZE {
+    for idx in 1..palette_size {
         let maximin = buckets
             .par_iter()
             .max_by_key(|bucket| {
@@ -176,7 +164,7 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(
             *slot = nearest.item;
         });
 
-    let cluster_means = array::from_fn::<_, PALETTE_SIZE, _>(|_| {
+    let cluster_means = std::iter::repeat_with(|| {
         (
             [
                 AtomicF32::new(0.0),
@@ -185,7 +173,9 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(
             ],
             AtomicF32::new(0.0),
         )
-    });
+    })
+    .take(palette_size)
+    .collect::<Vec<_>>();
 
     cluster_assignments
         .par_iter()
@@ -203,7 +193,7 @@ pub(crate) fn parallel_kmeans<const PALETTE_SIZE: usize>(
         });
 
     for _ in 0..100 {
-        centroids = KdTree::<_, _, 3, 1025, u32>::with_capacity(PALETTE_SIZE);
+        centroids = KdTree::<_, _, 3, 1025, u32>::with_capacity(palette_size);
 
         for (cidx, (mean, count)) in cluster_means.iter().enumerate() {
             let count = count.load(Ordering::Relaxed);

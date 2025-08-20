@@ -10,8 +10,8 @@ use dilate::DilateExpand;
 use image::RgbImage;
 use kiddo::float::kdtree::KdTree;
 use palette::{
-    color_difference::EuclideanDistance,
     Lab,
+    color_difference::EuclideanDistance,
 };
 use rayon::{
     iter::{

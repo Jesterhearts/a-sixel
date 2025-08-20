@@ -15,8 +15,8 @@ use std::{
 use ndarray::Array2;
 use ordered_float::OrderedFloat;
 use palette::{
-    color_difference::EuclideanDistance,
     Lab,
+    color_difference::EuclideanDistance,
 };
 use rayon::{
     iter::{
@@ -28,21 +28,10 @@ use rayon::{
 use rustyml::utility::principal_component_analysis::PCA;
 
 use crate::{
-    dither::Sierra,
+    PaletteBuilder,
     private,
     rgb_to_lab,
-    PaletteBuilder,
-    SixelEncoder,
 };
-
-pub type WuSixelEncoderMono<D = Sierra> = SixelEncoder<WuPaletteBuilder<2>, D>;
-pub type WuSixelEncoder4<D = Sierra> = SixelEncoder<WuPaletteBuilder<4>, D>;
-pub type WuSixelEncoder8<D = Sierra> = SixelEncoder<WuPaletteBuilder<8>, D>;
-pub type WuSixelEncoder16<D = Sierra> = SixelEncoder<WuPaletteBuilder<16>, D>;
-pub type WuSixelEncoder32<D = Sierra> = SixelEncoder<WuPaletteBuilder<32>, D>;
-pub type WuSixelEncoder64<D = Sierra> = SixelEncoder<WuPaletteBuilder<64>, D>;
-pub type WuSixelEncoder128<D = Sierra> = SixelEncoder<WuPaletteBuilder<128>, D>;
-pub type WuSixelEncoder256<D = Sierra> = SixelEncoder<WuPaletteBuilder<256>, D>;
 
 #[derive(Debug)]
 struct Hist {
@@ -162,20 +151,19 @@ impl Ord for Hist {
     }
 }
 
-pub struct WuPaletteBuilder<const PALETTE_SIZE: usize>;
+pub struct WuPaletteBuilder;
 
-impl<const PALETTE_SIZE: usize> private::Sealed for WuPaletteBuilder<PALETTE_SIZE> {}
-impl<const PALETTE_SIZE: usize> PaletteBuilder for WuPaletteBuilder<PALETTE_SIZE> {
+impl private::Sealed for WuPaletteBuilder {}
+impl PaletteBuilder for WuPaletteBuilder {
     const NAME: &'static str = "Wu";
-    const PALETTE_SIZE: usize = PALETTE_SIZE;
 
-    fn build_palette(image: &image::RgbImage) -> Vec<Lab> {
+    fn build_palette(image: &image::RgbImage, palette_size: usize) -> Vec<Lab> {
         let lab_points: Vec<Lab> = image.pixels().copied().map(rgb_to_lab).collect();
 
         let mut heap = BinaryHeap::new();
         heap.push(Hist::new(lab_points));
 
-        while heap.len() < PALETTE_SIZE {
+        while heap.len() < palette_size {
             let Some(mut hist) = heap.pop() else {
                 break;
             };

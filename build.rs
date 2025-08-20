@@ -1,6 +1,6 @@
 use rustc_version::{
-    version_meta,
     Channel,
+    version_meta,
 };
 
 fn main() {

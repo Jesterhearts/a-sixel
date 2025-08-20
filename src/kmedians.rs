@@ -1,7 +1,6 @@
 //! Uses k-medians to build a palette of colors.
 
 use std::{
-    array,
     collections::HashSet,
     sync::atomic::{
         AtomicBool,
@@ -13,8 +12,8 @@ use atomic_float::AtomicF32;
 use dashmap::DashSet;
 use image::RgbImage;
 use kiddo::{
-    float::kdtree::KdTree,
     SquaredEuclidean,
+    float::kdtree::KdTree,
 };
 use ordered_float::OrderedFloat;
 use palette::{
@@ -32,32 +31,20 @@ use rayon::{
 };
 
 use crate::{
-    dither::Sierra,
-    private,
-    rgb_to_lab,
     BitPaletteBuilder,
     PaletteBuilder,
-    SixelEncoder,
+    private,
+    rgb_to_lab,
 };
 
-pub type KMediansSixelEncoderMono<D = Sierra> = SixelEncoder<KMediansPaletteBuilder<2>, D>;
-pub type KMediansSixelEncoder4<D = Sierra> = SixelEncoder<KMediansPaletteBuilder<4>, D>;
-pub type KMediansSixelEncoder8<D = Sierra> = SixelEncoder<KMediansPaletteBuilder<8>, D>;
-pub type KMediansSixelEncoder16<D = Sierra> = SixelEncoder<KMediansPaletteBuilder<16>, D>;
-pub type KMediansSixelEncoder32<D = Sierra> = SixelEncoder<KMediansPaletteBuilder<32>, D>;
-pub type KMediansSixelEncoder64<D = Sierra> = SixelEncoder<KMediansPaletteBuilder<64>, D>;
-pub type KMediansSixelEncoder128<D = Sierra> = SixelEncoder<KMediansPaletteBuilder<128>, D>;
-pub type KMediansSixelEncoder256<D = Sierra> = SixelEncoder<KMediansPaletteBuilder<256>, D>;
+pub struct KMediansPaletteBuilder;
 
-pub struct KMediansPaletteBuilder<const PALETTE_SIZE: usize>;
+impl private::Sealed for KMediansPaletteBuilder {}
 
-impl<const PALETTE_SIZE: usize> private::Sealed for KMediansPaletteBuilder<PALETTE_SIZE> {}
-
-impl<const PALETTE_SIZE: usize> PaletteBuilder for KMediansPaletteBuilder<PALETTE_SIZE> {
+impl PaletteBuilder for KMediansPaletteBuilder {
     const NAME: &'static str = "K-Medians";
-    const PALETTE_SIZE: usize = PALETTE_SIZE;
 
-    fn build_palette(image: &RgbImage) -> Vec<Lab> {
+    fn build_palette(image: &RgbImage, palette_size: usize) -> Vec<Lab> {
         let candidates = image
             .pixels()
             .copied()
@@ -65,12 +52,12 @@ impl<const PALETTE_SIZE: usize> PaletteBuilder for KMediansPaletteBuilder<PALETT
             .map(|l| (l, 1.0))
             .collect::<Vec<_>>();
 
-        parallel_kmedians::<PALETTE_SIZE>(&candidates)
+        parallel_kmedians(&candidates, palette_size)
     }
 }
 
-pub(crate) fn parallel_kmedians<const PALETTE_SIZE: usize>(candidates: &[(Lab, f32)]) -> Vec<Lab> {
-    let mut centroids = KdTree::<_, _, 3, 257, u32>::with_capacity(PALETTE_SIZE);
+pub(crate) fn parallel_kmedians(candidates: &[(Lab, f32)], palette_size: usize) -> Vec<Lab> {
+    let mut centroids = KdTree::<_, _, 3, 257, u32>::with_capacity(palette_size);
 
     const BUCKETS: usize = 1 << 14;
     let buckets = Vec::from_iter(
@@ -86,9 +73,11 @@ pub(crate) fn parallel_kmedians<const PALETTE_SIZE: usize>(candidates: &[(Lab, f
         })
         .take(BUCKETS),
     );
+
+    let shift = BitPaletteBuilder::shift(BUCKETS);
     candidates.par_iter().copied().for_each(|(color, w)| {
         let color: Srgb = color.into_color();
-        let index = BitPaletteBuilder::<BUCKETS>::index(color.into_format());
+        let index = BitPaletteBuilder::index(color.into_format(), shift);
         buckets[index].0[0].fetch_add(color.red as f32 * w, Ordering::Relaxed);
         buckets[index].0[1].fetch_add(color.green as f32 * w, Ordering::Relaxed);
         buckets[index].0[2].fetch_add(color.blue as f32 * w, Ordering::Relaxed);
@@ -108,7 +97,7 @@ pub(crate) fn parallel_kmedians<const PALETTE_SIZE: usize>(candidates: &[(Lab, f
     let lab: Lab = rgb.into_color();
     centroids.add(&[lab.l, lab.a, lab.b], 0);
 
-    for idx in 1..PALETTE_SIZE {
+    for idx in 1..palette_size {
         let maximin = buckets
             .par_iter()
             .max_by_key(|bucket| {
@@ -135,16 +124,18 @@ pub(crate) fn parallel_kmedians<const PALETTE_SIZE: usize>(candidates: &[(Lab, f
         centroids.add(&[mean.l, mean.a, mean.b], idx as u32);
     }
 
-    let mut cluster_assignments = array::from_fn::<_, PALETTE_SIZE, _>(|_| DashSet::<KLabW>::new());
+    let mut cluster_assignments = std::iter::repeat_with(DashSet::<KLabW>::new)
+        .take(palette_size)
+        .collect::<Vec<_>>();
     candidates.par_iter().copied().for_each(|(color, w)| {
         let nearest = centroids.nearest_one::<SquaredEuclidean>(&[color.l, color.a, color.b]);
         cluster_assignments[nearest.item as usize].insert((color, w).into());
     });
 
-    let mut medians = [[0.0; 3]; PALETTE_SIZE];
+    let mut medians = vec![[0.0; 3]; palette_size];
 
     for _ in 0..100 {
-        centroids = KdTree::<_, _, 3, 257, u32>::with_capacity(PALETTE_SIZE);
+        centroids = KdTree::<_, _, 3, 257, u32>::with_capacity(palette_size);
 
         cluster_assignments
             .par_iter()
@@ -207,12 +198,14 @@ pub(crate) fn parallel_kmedians<const PALETTE_SIZE: usize>(candidates: &[(Lab, f
                 *medians = [median_l, median_a, median_b];
             });
 
-        for (idx, medians) in medians.into_iter().enumerate() {
-            centroids.add(&medians, idx as u32);
+        for (idx, medians) in medians.iter().enumerate() {
+            centroids.add(medians, idx as u32);
         }
 
         let old_assignments = cluster_assignments;
-        cluster_assignments = array::from_fn(|_| DashSet::<KLabW>::new());
+        cluster_assignments = std::iter::repeat_with(DashSet::<KLabW>::new)
+            .take(palette_size)
+            .collect::<Vec<_>>();
         let had_swap = AtomicBool::new(false);
         candidates.par_iter().copied().for_each(|(color, w)| {
             let nearest = centroids.nearest_one::<SquaredEuclidean>(&[color.l, color.a, color.b]);

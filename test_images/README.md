@@ -1,6 +1,6 @@
 # GENERATED
 These generated images are used for comparing different palette quantization and dithering
-algorithms. Each one was geenerated with a different set of instructions intended to stress
+algorithms. Each one was generated with a different set of instructions intended to stress
 different aspects of various algorithms.
 
 # Images and Areas of Interest
@@ -30,7 +30,9 @@ different aspects of various algorithms.
     - Are the colors correct?
     - Is the watermark captured?
 
-- `blobs2.png`: Blobs of color around the edges of the LAB color space, with some blobs in the middle. Certain encoders (e.g. k-means) can struggle with this image at smaller palette sizes because they of the way they discover clusters.
+- `blobs2.png`: Blobs of color around the edges of the LAB color space, with some blobs in the
+  middle. Certain encoders (e.g. k-means) can struggle with this image at smaller palette sizes
+  because of the way they discover clusters.
 
     <details>
     <summary>View Image</summary>
