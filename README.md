@@ -1,8 +1,8 @@
 # a-sixel
 
-[![Crates.io](https://img.shields.io/crates/v/a-sixel.svg)](https://crates.io/crates/a-sixel)
-[![Dependency status](https://deps.rs/repo/github/Jesterhearts/a-sixel/status.svg)](https://deps.rs/repo/github/Jesterhearts/a-sixel)
-[![Documentation](https://docs.rs/a-sixel/badge.svg)](https://docs.rs/a-sixel)
+[![Crates.io](https://img.shields.io/crates/v/a-sixel.svg?style=for-the-badge)](https://crates.io/crates/a-sixel)
+[![Dependency status](https://deps.rs/repo/github/Jesterhearts/a-sixel/status.svg?style=for-the-badge)](https://deps.rs/repo/github/Jesterhearts/a-sixel)
+[![Documentation](https://img.shields.io/docsrs/a-sixel/latest?style=for-the-badge)](https://docs.rs/a-sixel)
 
 A sixel library for encoding images.
 
