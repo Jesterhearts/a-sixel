@@ -15,6 +15,7 @@ use palette::color_difference::EuclideanDistance;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 use rayon::slice::ParallelSliceMut;
+use rustyml::utility::SVDSolver;
 use rustyml::utility::principal_component_analysis::PCA;
 
 use crate::PaletteBuilder;
@@ -58,9 +59,9 @@ impl Hist {
             _ => unreachable!(),
         });
 
-        let mut pca = PCA::new(3);
+        let pca = PCA::new(3, SVDSolver::Full);
 
-        match pca.fit_transform(data.view()) {
+        match pca.and_then(|mut pca| pca.fit_transform(&data)) {
             Ok(projection) => {
                 let mut projections = projection
                     .column(0)
