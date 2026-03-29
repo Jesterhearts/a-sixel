@@ -12,23 +12,17 @@
 use std::collections::HashSet;
 
 use image::RgbImage;
-use kiddo::{
-    SquaredEuclidean,
-    float::kdtree::KdTree,
-};
+use kiddo::SquaredEuclidean;
+use kiddo::float::kdtree::KdTree;
 use ordered_float::OrderedFloat;
 use palette::Lab;
-use rayon::iter::{
-    IntoParallelRefIterator,
-    ParallelIterator,
-};
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 use sobol_burley::sample_4d;
 
-use crate::{
-    PaletteBuilder,
-    private,
-    rgb_to_lab,
-};
+use crate::PaletteBuilder;
+use crate::private;
+use crate::rgb_to_lab;
 
 pub struct ADUPaletteBuilder;
 
@@ -36,7 +30,10 @@ impl private::Sealed for ADUPaletteBuilder {}
 impl PaletteBuilder for ADUPaletteBuilder {
     const NAME: &'static str = "ADU";
 
-    fn build_palette(image: &RgbImage, palette_size: usize) -> Vec<Lab> {
+    fn build_palette(
+        image: &RgbImage,
+        palette_size: usize,
+    ) -> Vec<Lab> {
         let theta = (400.0 * (palette_size as f32).sqrt()) as usize;
         let steps = ((2 * palette_size).max(4) - 3) * theta;
 

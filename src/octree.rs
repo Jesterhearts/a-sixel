@@ -11,29 +11,21 @@
 //! You can reverse this behavior by setting the `USE_MIN_HEAP` type parameter
 //! to `true`, which will use a min-heap instead.
 
-use std::collections::{
-    BinaryHeap,
-    HashSet,
-};
+use std::collections::BinaryHeap;
+use std::collections::HashSet;
 
 use dilate::DilateExpand;
 use ordered_float::OrderedFloat;
-use palette::{
-    IntoColor,
-    Lab,
-    Srgb,
-};
-use rayon::iter::{
-    IndexedParallelIterator,
-    IntoParallelIterator,
-    IntoParallelRefIterator,
-    ParallelIterator,
-};
+use palette::IntoColor;
+use palette::Lab;
+use palette::Srgb;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 
-use crate::{
-    PaletteBuilder,
-    private,
-};
+use crate::PaletteBuilder;
+use crate::private;
 
 #[derive(Debug, Clone, Copy)]
 struct Node {
@@ -51,13 +43,19 @@ struct Candidate<const MIN: bool> {
 }
 
 impl<const MIN: bool> PartialOrd for Candidate<MIN> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(
+        &self,
+        other: &Self,
+    ) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl<const MIN: bool> Ord for Candidate<MIN> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(
+        &self,
+        other: &Self,
+    ) -> std::cmp::Ordering {
         if MIN {
             other.count.cmp(&self.count)
         } else {
@@ -84,7 +82,10 @@ impl<const USE_MIN_HEAP: bool> OctreePaletteBuilder<USE_MIN_HEAP> {
         }
     }
 
-    fn insert(&mut self, color: Srgb<u8>) {
+    fn insert(
+        &mut self,
+        color: Srgb<u8>,
+    ) {
         let r = color.red.dilate_expand::<3>().value();
         let g = color.green.dilate_expand::<3>().value();
         let b = color.blue.dilate_expand::<3>().value();
@@ -126,7 +127,10 @@ impl<const USE_MIN_HEAP: bool> private::Sealed for OctreePaletteBuilder<USE_MIN_
 impl<const USE_MIN_HEAP: bool> PaletteBuilder for OctreePaletteBuilder<USE_MIN_HEAP> {
     const NAME: &'static str = "Octree";
 
-    fn build_palette(image: &image::RgbImage, palette_size: usize) -> Vec<palette::Lab> {
+    fn build_palette(
+        image: &image::RgbImage,
+        palette_size: usize,
+    ) -> Vec<palette::Lab> {
         let mut octree = OctreePaletteBuilder::<USE_MIN_HEAP>::new();
 
         for pixel in image.pixels() {

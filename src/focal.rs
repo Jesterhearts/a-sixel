@@ -24,59 +24,97 @@
 //!    the phase spectrum, a is the amplitude spectrum, and ld is the local
 //!    distance.
 
-use std::{
-    f32::consts::PI,
-    sync::atomic::Ordering,
-};
+use std::f32::consts::PI;
+use std::sync::atomic::Ordering;
 
 use atomic_float::AtomicF32;
-use image::{
-    Rgb,
-    RgbImage,
-};
-use kiddo::{
-    SquaredEuclidean,
-    float::kdtree::KdTree,
-};
-use libblur::{
-    AnisotropicRadius,
-    BlurImageMut,
-    FastBlurChannels,
-    ThreadingPolicy,
-    stack_blur_f32,
-};
-use palette::{
-    IntoColor,
-    Lab,
-    Srgb,
-    color_difference::EuclideanDistance,
-};
-use rayon::{
-    iter::{
-        IndexedParallelIterator,
-        IntoParallelIterator,
-        IntoParallelRefIterator,
-        IntoParallelRefMutIterator,
-        ParallelIterator,
-    },
-    slice::{
-        ParallelSlice,
-        ParallelSliceMut,
-    },
-};
-use rustfft::{
-    FftPlanner,
-    num_complex::Complex,
-    num_traits::Zero,
-};
+use image::Rgb;
+use image::RgbImage;
+use kiddo::SquaredEuclidean;
+use kiddo::float::kdtree::KdTree;
+use libblur::AnisotropicRadius;
+use libblur::BlurImageMut;
+use libblur::FastBlurChannels;
+use libblur::ThreadingPolicy;
+use libblur::stack_blur_f32;
+use palette::IntoColor;
+use palette::Lab;
+use palette::Srgb;
+use palette::color_difference::EuclideanDistance;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::IntoParallelRefMutIterator;
+use rayon::iter::ParallelIterator;
+use rayon::slice::ParallelSlice;
+use rayon::slice::ParallelSliceMut;
+use rustfft::FftPlanner;
+use rustfft::num_complex::Complex;
+use rustfft::num_traits::Zero;
 
-use crate::{
-    BitPaletteBuilder,
-    PaletteBuilder,
-    kmeans::parallel_kmeans,
-    private,
-    rgb_to_lab,
-};
+use crate::BitPaletteBuilder;
+use crate::PaletteBuilder;
+use crate::kmeans::parallel_kmeans;
+use crate::private;
+use crate::rgb_to_lab;
+
+fn par_min_max(data: &[f32]) -> (f32, f32) {
+    data.par_iter()
+        .copied()
+        .fold(
+            || (f32::MAX, f32::MIN),
+            |(mn, mx), v| (mn.min(v), mx.max(v)),
+        )
+        .reduce(
+            || (f32::MAX, f32::MIN),
+            |(a, b), (c, d)| (a.min(c), b.max(d)),
+        )
+}
+
+fn normalize(data: &mut [f32]) {
+    let (min, max) = par_min_max(data);
+    let range = (max - min).max(f32::EPSILON);
+    data.par_iter_mut().for_each(|v| {
+        *v = (*v - min) / range;
+    });
+}
+
+fn fft_2d(
+    buffer: &mut [Complex<f32>],
+    scratch: &mut Vec<Complex<f32>>,
+    width: usize,
+    height: usize,
+    fft_row: &dyn rustfft::Fft<f32>,
+    fft_col: &dyn rustfft::Fft<f32>,
+) {
+    scratch.resize(buffer.len(), Complex::zero());
+
+    buffer.par_chunks_mut(width).for_each(|chunk| {
+        fft_row.process(chunk);
+    });
+
+    (0..width)
+        .into_par_iter()
+        .zip(scratch.par_chunks_mut(height))
+        .for_each(|(x, col)| {
+            for y in 0..height {
+                col[y] = buffer[y * width + x];
+            }
+        });
+
+    scratch.par_chunks_mut(height).for_each(|chunk| {
+        fft_col.process(chunk);
+    });
+
+    (0..height)
+        .into_par_iter()
+        .zip(buffer.par_chunks_mut(width))
+        .for_each(|(y, row)| {
+            for x in 0..width {
+                row[x] = scratch[x * height + y];
+            }
+        });
+}
 
 pub struct FocalPaletteBuilder;
 
@@ -85,7 +123,10 @@ impl private::Sealed for FocalPaletteBuilder {}
 impl PaletteBuilder for FocalPaletteBuilder {
     const NAME: &'static str = "Focal";
 
-    fn build_palette(image: &RgbImage, palette_size: usize) -> Vec<Lab> {
+    fn build_palette(
+        image: &RgbImage,
+        palette_size: usize,
+    ) -> Vec<Lab> {
         let image_width = image.width();
         let image_height = image.height();
         let image = image.to_vec();
@@ -345,11 +386,7 @@ impl PaletteBuilder for FocalPaletteBuilder {
                 *dest = centroid.distance(p);
             });
 
-        let max_dist = dists.par_iter().copied().reduce(|| f32::MIN, f32::max);
-        let min_dist = dists.par_iter().copied().reduce(|| f32::MAX, f32::min);
-        dists.par_iter_mut().for_each(|d| {
-            *d = (*d - min_dist) / (max_dist - min_dist).max(f32::EPSILON);
-        });
+        normalize(&mut dists);
 
         let mut local_dists = vec![0.0f32; pixels.len()];
 
@@ -358,7 +395,7 @@ impl PaletteBuilder for FocalPaletteBuilder {
             .zip(&mut local_dists)
             .for_each(|(idx, dest)| {
                 let x = idx as isize % image_width as isize;
-                let y = idx as isize / image_height as isize;
+                let y = idx as isize / image_width as isize;
 
                 let mut sum = 0.0;
                 let mut count = 0;
@@ -384,18 +421,7 @@ impl PaletteBuilder for FocalPaletteBuilder {
                 *dest = sum / count as f32
             });
 
-        let max_local_dist = local_dists
-            .par_iter()
-            .copied()
-            .reduce(|| f32::MIN, f32::max);
-        let min_local_dist = local_dists
-            .par_iter()
-            .copied()
-            .reduce(|| f32::MAX, f32::min);
-
-        local_dists.par_iter_mut().for_each(|d| {
-            *d = (*d - min_local_dist) / (max_local_dist - min_local_dist).max(f32::EPSILON);
-        });
+        normalize(&mut local_dists);
 
         #[cfg(feature = "dump-local-saliency")]
         {
@@ -473,17 +499,23 @@ impl PaletteBuilder for FocalPaletteBuilder {
                 },
             );
 
-        let min_weight = candidates
-            .par_iter()
-            .map(|(_, w)| *w)
-            .reduce(|| f32::MAX, f32::min);
-        let max_weight = candidates
-            .par_iter()
-            .map(|(_, w)| *w)
-            .reduce(|| f32::MIN, f32::max);
-        candidates.par_iter_mut().for_each(|(_, w)| {
-            *w = (*w - min_weight) / (max_weight - min_weight).max(f32::EPSILON);
-        });
+        {
+            let (min_weight, max_weight) = candidates
+                .par_iter()
+                .map(|(_, w)| *w)
+                .fold(
+                    || (f32::MAX, f32::MIN),
+                    |(mn, mx), v| (mn.min(v), mx.max(v)),
+                )
+                .reduce(
+                    || (f32::MAX, f32::MIN),
+                    |(a, b), (c, d)| (a.min(c), b.max(d)),
+                );
+            let range = (max_weight - min_weight).max(f32::EPSILON);
+            candidates.par_iter_mut().for_each(|(_, w)| {
+                *w = (*w - min_weight) / range;
+            });
+        }
 
         #[cfg(feature = "dump-weights")]
         {
@@ -510,6 +542,139 @@ struct Saliency {
     amplitude_spectrum: Vec<f32>,
 }
 
+fn blur_norm_sqr_normalize(
+    buffer: &[Complex<f32>],
+    width_p2: u32,
+    height_p2: u32,
+    window_radius: u32,
+) -> Vec<f32> {
+    let mut out = vec![0.0f32; buffer.len()];
+    buffer
+        .par_iter()
+        .copied()
+        .zip(&mut out)
+        .for_each(|(c, dest)| *dest = c.norm_sqr());
+
+    {
+        let mut img = BlurImageMut::borrow(&mut out, width_p2, height_p2, FastBlurChannels::Plane);
+        stack_blur_f32(
+            &mut img,
+            AnisotropicRadius::new(window_radius),
+            ThreadingPolicy::Adaptive,
+        )
+        .unwrap();
+    }
+
+    normalize(&mut out);
+    out
+}
+
+fn crop_p2(
+    data: Vec<f32>,
+    w: u32,
+    h: u32,
+    wp2: u32,
+    hp2: u32,
+) -> Vec<f32> {
+    if wp2 == w && hp2 == h {
+        return data;
+    }
+    let mut out = vec![0.0f32; h as usize * w as usize];
+    for y in 0..h as usize {
+        for x in 0..w as usize {
+            out[y * w as usize + x] = data[y * wp2 as usize + x];
+        }
+    }
+    out
+}
+
+fn spectral_residual(
+    planner: &mut FftPlanner<f32>,
+    scratch: &mut Vec<Complex<f32>>,
+    amplitude: &[f32],
+    phase: &[f32],
+    width_p2: usize,
+    height_p2: usize,
+    window_radius: u32,
+) -> Vec<f32> {
+    let mut log_amplitude = vec![0.0f32; phase.len()];
+    amplitude
+        .par_iter()
+        .copied()
+        .zip(&mut log_amplitude)
+        .for_each(|(a, dest)| *dest = a.max(f32::EPSILON).ln());
+
+    let mut log_blurred = log_amplitude.clone();
+
+    {
+        let mut img = BlurImageMut::borrow(
+            &mut log_blurred,
+            width_p2 as u32,
+            height_p2 as u32,
+            FastBlurChannels::Plane,
+        );
+        stack_blur_f32(
+            &mut img,
+            AnisotropicRadius::new(window_radius),
+            ThreadingPolicy::Adaptive,
+        )
+        .unwrap();
+    }
+
+    let mut residual = vec![0.0f32; width_p2 * height_p2];
+    log_amplitude
+        .into_par_iter()
+        .zip(log_blurred)
+        .zip(&mut residual)
+        .for_each(|((a, b), dest)| {
+            *dest = a - b;
+        });
+
+    let ifft_row = planner.plan_fft_inverse(width_p2);
+    let ifft_col = planner.plan_fft_inverse(height_p2);
+
+    let mut buffer = vec![Complex::zero(); residual.len()];
+    residual
+        .into_par_iter()
+        .zip(phase.par_iter())
+        .zip(&mut buffer)
+        .for_each(|((a, p), dest)| {
+            *dest = Complex {
+                re: a.exp() * p.cos(),
+                im: a.exp() * p.sin(),
+            };
+        });
+
+    fft_2d(
+        &mut buffer,
+        scratch,
+        width_p2,
+        height_p2,
+        ifft_row.as_ref(),
+        ifft_col.as_ref(),
+    );
+
+    blur_norm_sqr_normalize(&buffer, width_p2 as u32, height_p2 as u32, window_radius)
+}
+
+fn flatten_midrange(
+    values: &[f32],
+    min_val: f32,
+    max_val: f32,
+) -> Vec<f32> {
+    let range = (max_val - min_val).max(f32::EPSILON);
+    let mut out = vec![0.0f32; values.len()];
+    values
+        .par_iter()
+        .copied()
+        .zip(&mut out)
+        .for_each(|(v, dest)| {
+            let x = ((v - min_val) / range - 0.5) * 2.0;
+            *dest = ((x * PI / 2.0).sin().powi(15) / 2.0 + 0.5) * (max_val - min_val) + min_val;
+        });
+    out
+}
+
 fn compute_saliency(
     planner: &mut FftPlanner<f32>,
     channel_values: &[f32],
@@ -517,61 +682,32 @@ fn compute_saliency(
     image_height: u32,
     window_radius: u32,
 ) -> Saliency {
-    let image_width_p2 = image_width.next_power_of_two();
-    let image_height_p2 = image_height.next_power_of_two();
+    let wp2 = image_width.next_power_of_two();
+    let hp2 = image_height.next_power_of_two();
+    let w = wp2 as usize;
+    let h = hp2 as usize;
 
-    let buffer = {
-        let fft_row = planner.plan_fft_forward(image_width_p2 as usize);
-        let fft_col = planner.plan_fft_forward(image_height_p2 as usize);
+    let fft_row = planner.plan_fft_forward(w);
+    let fft_col = planner.plan_fft_forward(h);
 
-        let mut buffer = vec![Complex::zero(); image_width_p2 as usize * image_height_p2 as usize];
-        channel_values
-            .par_iter()
-            .copied()
-            .zip(&mut buffer)
-            .for_each(|(v, dest)| {
-                *dest = Complex { re: v, im: 0.0 };
-            });
+    let mut buffer = vec![Complex::zero(); w * h];
+    channel_values
+        .par_iter()
+        .copied()
+        .zip(&mut buffer)
+        .for_each(|(v, dest)| {
+            *dest = Complex { re: v, im: 0.0 };
+        });
 
-        buffer
-            .par_chunks_mut(image_width_p2 as usize)
-            .for_each(|chunk| {
-                fft_row.process(chunk);
-            });
-
-        let mut transpose = vec![Complex::zero(); buffer.len()];
-        (0..image_width_p2 as usize)
-            .into_par_iter()
-            .zip(transpose.par_chunks_mut(image_height_p2 as usize))
-            .for_each(|(x, col)| {
-                (0..image_height_p2 as usize)
-                    .into_par_iter()
-                    .zip(col)
-                    .for_each(|(y, dest)| {
-                        *dest = buffer[y * image_width_p2 as usize + x];
-                    });
-            });
-
-        transpose
-            .par_chunks_mut(image_height_p2 as usize)
-            .for_each(|chunk| {
-                fft_col.process(chunk);
-            });
-
-        (0..image_height_p2 as usize)
-            .into_par_iter()
-            .zip(buffer.par_chunks_mut(image_width_p2 as usize))
-            .for_each(|(y, row)| {
-                (0..image_width_p2 as usize)
-                    .into_par_iter()
-                    .zip(row)
-                    .for_each(|(x, dest)| {
-                        *dest = transpose[x * image_height_p2 as usize + y];
-                    });
-            });
-
-        transpose
-    };
+    let mut scratch = Vec::new();
+    fft_2d(
+        &mut buffer,
+        &mut scratch,
+        w,
+        h,
+        fft_row.as_ref(),
+        fft_col.as_ref(),
+    );
 
     let mut amplitude = vec![0.0f32; buffer.len()];
     buffer
@@ -580,8 +716,9 @@ fn compute_saliency(
         .zip(&mut amplitude)
         .for_each(|(c, dest)| *dest = c.norm());
 
+    // Phase spectrum (PFT): IFFT of unit-phase vectors
     let pft = {
-        let mut ifft_buffer = vec![Complex::zero(); buffer.len().next_power_of_two()];
+        let mut ifft_buffer = vec![Complex::zero(); buffer.len()];
 
         amplitude
             .par_iter()
@@ -595,76 +732,18 @@ fn compute_saliency(
                 };
             });
 
-        let ifft_row = planner.plan_fft_inverse(image_width_p2.next_power_of_two() as usize);
-        let ifft_col = planner.plan_fft_inverse(image_height_p2.next_power_of_two() as usize);
+        let ifft_row = planner.plan_fft_inverse(w);
+        let ifft_col = planner.plan_fft_inverse(h);
+        fft_2d(
+            &mut ifft_buffer,
+            &mut scratch,
+            w,
+            h,
+            ifft_row.as_ref(),
+            ifft_col.as_ref(),
+        );
 
-        ifft_buffer
-            .par_chunks_mut(image_width_p2 as usize)
-            .for_each(|chunk| {
-                ifft_col.process(chunk);
-            });
-
-        let mut transpose = vec![Complex::zero(); ifft_buffer.len()];
-        (0..image_width_p2 as usize)
-            .into_par_iter()
-            .zip(transpose.par_chunks_mut(image_height_p2 as usize))
-            .for_each(|(x, col)| {
-                (0..image_height_p2 as usize)
-                    .into_par_iter()
-                    .zip(col)
-                    .for_each(|(y, dest)| {
-                        *dest = ifft_buffer[y * image_width_p2 as usize + x];
-                    });
-            });
-
-        transpose
-            .par_chunks_mut(image_width_p2 as usize)
-            .for_each(|chunk| {
-                ifft_row.process(chunk);
-            });
-
-        (0..image_height_p2 as usize)
-            .into_par_iter()
-            .zip(ifft_buffer.par_chunks_mut(image_width_p2 as usize))
-            .for_each(|(y, row)| {
-                (0..image_width_p2 as usize)
-                    .into_par_iter()
-                    .zip(row)
-                    .for_each(|(x, dest)| {
-                        *dest = transpose[x * image_height_p2 as usize + y];
-                    });
-            });
-
-        let mut pft = vec![0.0f32; transpose.len()];
-
-        transpose
-            .par_iter()
-            .copied()
-            .zip(&mut pft)
-            .for_each(|(c, dest)| *dest = c.norm_sqr());
-
-        {
-            let mut pft = BlurImageMut::borrow(
-                &mut pft,
-                image_width_p2,
-                image_height_p2,
-                FastBlurChannels::Plane,
-            );
-            stack_blur_f32(
-                &mut pft,
-                AnisotropicRadius::new(window_radius),
-                ThreadingPolicy::Adaptive,
-            )
-            .unwrap();
-        }
-
-        let max_pft = pft.par_iter().copied().reduce(|| f32::MIN, f32::max);
-        let min_pft = pft.par_iter().copied().reduce(|| f32::MAX, f32::min);
-        pft.par_iter_mut().for_each(|a| {
-            *a = (*a - min_pft) / (max_pft - min_pft).max(f32::EPSILON);
-        });
-
-        pft
+        blur_norm_sqr_normalize(&ifft_buffer, wp2, hp2, window_radius)
     };
 
     let mut phase = vec![0.0f32; buffer.len()];
@@ -673,20 +752,10 @@ fn compute_saliency(
         .zip(&mut phase)
         .for_each(|(c, dest)| *dest = c.arg());
 
-    let mut mod_amplitude = vec![0.0f32; phase.len()];
-    let max_amplitude = amplitude.par_iter().copied().reduce(|| f32::MIN, f32::max);
-    let min_amplitude = amplitude.par_iter().copied().reduce(|| f32::MAX, f32::min);
-    amplitude
-        .par_iter()
-        .copied()
-        .zip(&mut mod_amplitude)
-        .for_each(|(a, dest)| {
-            let x = ((a - min_amplitude) / (max_amplitude - min_amplitude).max(f32::EPSILON) - 0.5)
-                * 2.0;
-            *dest = ((x * PI / 2.0).sin().powi(15) / 2.0 + 0.5) * (max_amplitude - min_amplitude)
-                + min_amplitude
-        });
+    let (min_amplitude, max_amplitude) = par_min_max(&amplitude);
+    let mod_amplitude = flatten_midrange(&amplitude, min_amplitude, max_amplitude);
 
+    // Amplitude spectrum (ASR): IFFT with modulated amplitude + original phase
     let asr = {
         let mut ifft_buffer = vec![Complex::zero(); phase.len()];
         mod_amplitude
@@ -701,381 +770,53 @@ fn compute_saliency(
                 };
             });
 
-        let ifft_row = planner.plan_fft_inverse(image_width_p2 as usize);
-        let ifft_col = planner.plan_fft_inverse(image_height_p2 as usize);
-        ifft_buffer
-            .par_chunks_mut(image_height_p2 as usize)
-            .for_each(|chunk| {
-                ifft_col.process(chunk);
-            });
+        let ifft_row = planner.plan_fft_inverse(w);
+        let ifft_col = planner.plan_fft_inverse(h);
+        fft_2d(
+            &mut ifft_buffer,
+            &mut scratch,
+            w,
+            h,
+            ifft_row.as_ref(),
+            ifft_col.as_ref(),
+        );
 
-        let mut transpose = vec![Complex::zero(); ifft_buffer.len()];
-        (0..image_width_p2 as usize)
-            .into_par_iter()
-            .zip(transpose.par_chunks_mut(image_height_p2 as usize))
-            .for_each(|(x, col)| {
-                (0..image_height_p2 as usize)
-                    .into_par_iter()
-                    .zip(col)
-                    .for_each(|(y, dest)| {
-                        *dest = ifft_buffer[y * image_width_p2 as usize + x];
-                    });
-            });
-
-        transpose
-            .par_chunks_mut(image_width_p2 as usize)
-            .for_each(|chunk| {
-                ifft_row.process(chunk);
-            });
-
-        (0..image_height_p2 as usize)
-            .into_par_iter()
-            .zip(ifft_buffer.par_chunks_mut(image_width_p2 as usize))
-            .for_each(|(y, row)| {
-                (0..image_width_p2 as usize)
-                    .into_par_iter()
-                    .zip(row)
-                    .for_each(|(x, dest)| {
-                        *dest = transpose[x * image_height_p2 as usize + y];
-                    });
-            });
-
-        let mut asr = vec![0.0f32; transpose.len()];
-        transpose
-            .par_iter()
-            .copied()
-            .zip(&mut asr)
-            .for_each(|(c, dest)| *dest = c.norm_sqr());
-
-        {
-            let mut asr = BlurImageMut::borrow(
-                &mut asr,
-                image_width_p2,
-                image_height_p2,
-                FastBlurChannels::Plane,
-            );
-            stack_blur_f32(
-                &mut asr,
-                AnisotropicRadius::new(window_radius),
-                ThreadingPolicy::Adaptive,
-            )
-            .unwrap();
-        }
-
-        let max_asr = asr.par_iter().copied().reduce(|| f32::MIN, f32::max);
-        let min_asr = asr.par_iter().copied().reduce(|| f32::MAX, f32::min);
-        asr.par_iter_mut().for_each(|a| {
-            *a = (*a - min_asr) / (max_asr - min_asr).max(f32::EPSILON);
-        });
-
-        asr
+        blur_norm_sqr_normalize(&ifft_buffer, wp2, hp2, window_radius)
     };
 
-    let sr = {
-        let mut log_amplitude = vec![0.0f32; phase.len()];
-        amplitude
-            .into_par_iter()
-            .zip(&mut log_amplitude)
-            .for_each(|(a, dest)| *dest = a.max(f32::EPSILON).ln());
+    // Spectral residual (SR): log-amplitude residual + original phase
+    let sr = spectral_residual(
+        planner,
+        &mut scratch,
+        &amplitude,
+        &phase,
+        w,
+        h,
+        window_radius,
+    );
 
-        let mut log_blurred = log_amplitude.clone();
-
-        {
-            let mut amplitude = BlurImageMut::borrow(
-                &mut log_blurred,
-                image_width_p2,
-                image_height_p2,
-                FastBlurChannels::Plane,
-            );
-            stack_blur_f32(
-                &mut amplitude,
-                AnisotropicRadius::new(window_radius),
-                ThreadingPolicy::Adaptive,
-            )
-            .unwrap();
-        }
-
-        let mut residual = vec![0.0f32; image_width_p2 as usize * image_height_p2 as usize];
-        log_amplitude
-            .into_par_iter()
-            .zip(log_blurred)
-            .zip(&mut residual)
-            .for_each(|((a, b), dest)| {
-                *dest = a - b;
-            });
-
-        let sr_buffer = {
-            let ifft_row = planner.plan_fft_inverse(image_width_p2 as usize);
-            let ifft_col = planner.plan_fft_inverse(image_height_p2 as usize);
-
-            let mut buffer = vec![Complex::zero(); residual.len()];
-            residual
-                .into_par_iter()
-                .zip(phase.par_iter())
-                .zip(&mut buffer)
-                .for_each(|((a, p), dest)| {
-                    *dest = Complex {
-                        re: a.exp() * p.cos(),
-                        im: a.exp() * p.sin(),
-                    };
-                });
-
-            buffer
-                .par_chunks_mut(image_height_p2 as usize)
-                .for_each(|chunk| {
-                    ifft_col.process(chunk);
-                });
-
-            let mut transpose = vec![Complex::zero(); buffer.len()];
-            (0..image_width_p2 as usize)
-                .into_par_iter()
-                .zip(transpose.par_chunks_mut(image_height_p2 as usize))
-                .for_each(|(x, col)| {
-                    (0..image_height_p2 as usize)
-                        .into_par_iter()
-                        .zip(col)
-                        .for_each(|(y, dest)| {
-                            *dest = buffer[y * image_width_p2 as usize + x];
-                        });
-                });
-
-            transpose
-                .par_chunks_mut(image_width_p2 as usize)
-                .for_each(|chunk| {
-                    ifft_row.process(chunk);
-                });
-
-            (0..image_height_p2 as usize)
-                .into_par_iter()
-                .zip(buffer.par_chunks_mut(image_width_p2 as usize))
-                .for_each(|(y, row)| {
-                    (0..image_width_p2 as usize)
-                        .into_par_iter()
-                        .zip(row)
-                        .for_each(|(x, dest)| {
-                            *dest = transpose[x * image_height_p2 as usize + y];
-                        });
-                });
-
-            transpose
-        };
-
-        let mut saliency = vec![0.0f32; image_width_p2 as usize * image_height_p2 as usize];
-        sr_buffer
-            .into_par_iter()
-            .zip(&mut saliency)
-            .for_each(|(c, dest)| *dest = c.norm_sqr());
-
-        {
-            let mut saliency = BlurImageMut::borrow(
-                &mut saliency,
-                image_width_p2,
-                image_height_p2,
-                FastBlurChannels::Plane,
-            );
-            stack_blur_f32(
-                &mut saliency,
-                AnisotropicRadius::new(window_radius),
-                ThreadingPolicy::Adaptive,
-            )
-            .unwrap();
-        }
-
-        let max_saliency = saliency.par_iter().copied().reduce(|| f32::MIN, f32::max);
-        let min_saliency = saliency.par_iter().copied().reduce(|| f32::MAX, f32::min);
-        saliency.par_iter_mut().for_each(|s| {
-            *s = (*s - min_saliency) / (max_saliency - min_saliency).max(f32::EPSILON);
-        });
-
-        saliency
-    };
-
+    // Modulated spectral residual (MSR): log-modulated-amplitude residual +
+    // modulated phase
     let msr = {
-        let mut log_amplitude = vec![0.0f32; phase.len()];
-        mod_amplitude
-            .into_par_iter()
-            .zip(&mut log_amplitude)
-            .for_each(|(a, dest)| *dest = a.max(f32::EPSILON).ln());
+        let (min_phase, max_phase) = par_min_max(&phase);
+        let mod_phase = flatten_midrange(&phase, min_phase, max_phase);
 
-        let mut log_blurred = log_amplitude.clone();
-
-        {
-            let mut amplitude = BlurImageMut::borrow(
-                &mut log_blurred,
-                image_width_p2,
-                image_height_p2,
-                FastBlurChannels::Plane,
-            );
-            stack_blur_f32(
-                &mut amplitude,
-                AnisotropicRadius::new(window_radius),
-                ThreadingPolicy::Adaptive,
-            )
-            .unwrap();
-        }
-
-        let mut residual = vec![0.0f32; image_width_p2 as usize * image_height_p2 as usize];
-        log_amplitude
-            .into_par_iter()
-            .zip(log_blurred)
-            .zip(&mut residual)
-            .for_each(|((a, b), dest)| {
-                *dest = a - b;
-            });
-
-        let mut mod_phase = vec![0.0f32; phase.len()];
-
-        let max_phase = phase.par_iter().copied().reduce(|| f32::MIN, f32::max);
-        let min_phase = phase.par_iter().copied().reduce(|| f32::MAX, f32::min);
-
-        phase
-            .into_par_iter()
-            .zip(&mut mod_phase)
-            .for_each(|(p, dest)| {
-                let x = ((p - min_phase) / (max_phase - min_phase).max(f32::EPSILON) - 0.5) * 2.0;
-                *dest = ((x * PI / 2.0).sin().powi(15) / 2.0 + 0.5) * (max_phase - min_phase)
-                    + min_phase;
-            });
-
-        let mut msr_buffer = vec![Complex::zero(); mod_phase.len()];
-        residual
-            .into_par_iter()
-            .zip(mod_phase)
-            .zip(&mut msr_buffer)
-            .for_each(|((a, p), dest)| {
-                *dest = Complex {
-                    re: a * p.cos(),
-                    im: a * p.sin(),
-                };
-            });
-
-        let ifft_row = planner.plan_fft_inverse(image_width_p2 as usize);
-        let ifft_col = planner.plan_fft_inverse(image_height_p2 as usize);
-        msr_buffer
-            .par_chunks_mut(image_height_p2 as usize)
-            .for_each(|chunk| {
-                ifft_col.process(chunk);
-            });
-
-        let mut transpose = vec![Complex::zero(); msr_buffer.len()];
-        (0..image_width_p2 as usize)
-            .into_par_iter()
-            .zip(transpose.par_chunks_mut(image_height_p2 as usize))
-            .for_each(|(x, col)| {
-                (0..image_height_p2 as usize)
-                    .into_par_iter()
-                    .zip(col)
-                    .for_each(|(y, dest)| {
-                        *dest = msr_buffer[y * image_width_p2 as usize + x];
-                    });
-            });
-
-        transpose
-            .par_chunks_mut(image_width_p2 as usize)
-            .for_each(|chunk| {
-                ifft_row.process(chunk);
-            });
-
-        (0..image_height_p2 as usize)
-            .into_par_iter()
-            .zip(msr_buffer.par_chunks_mut(image_width_p2 as usize))
-            .for_each(|(y, row)| {
-                (0..image_width_p2 as usize)
-                    .into_par_iter()
-                    .zip(row)
-                    .for_each(|(x, dest)| {
-                        *dest = transpose[x * image_height_p2 as usize + y];
-                    });
-            });
-
-        let mut msr = vec![0.0f32; transpose.len()];
-        transpose
-            .par_iter()
-            .copied()
-            .zip(&mut msr)
-            .for_each(|(c, dest)| *dest = c.norm_sqr());
-
-        {
-            let mut msr = BlurImageMut::borrow(
-                &mut msr,
-                image_width_p2,
-                image_height_p2,
-                FastBlurChannels::Plane,
-            );
-            stack_blur_f32(
-                &mut msr,
-                AnisotropicRadius::new(window_radius),
-                ThreadingPolicy::Adaptive,
-            )
-            .unwrap();
-        }
-
-        let max_msr = msr.par_iter().copied().reduce(|| f32::MIN, f32::max);
-        let min_msr = msr.par_iter().copied().reduce(|| f32::MAX, f32::min);
-        msr.par_iter_mut().for_each(|s| {
-            *s = (*s - min_msr) / (max_msr - min_msr).max(f32::EPSILON);
-        });
-
-        msr
-    };
-
-    let sr = if image_height_p2 != image_height || image_width_p2 != image_width {
-        let mut sr_out = vec![0.0f32; image_height as usize * image_width as usize];
-        for y in 0..image_height as usize {
-            for x in 0..image_width as usize {
-                let idx = y * image_width_p2 as usize + x;
-                sr_out[y * image_width as usize + x] = sr[idx];
-            }
-        }
-        sr_out
-    } else {
-        sr
-    };
-
-    let msr = if image_height_p2 != image_height || image_width_p2 != image_width {
-        let mut msr_out = vec![0.0f32; image_height as usize * image_width as usize];
-        for y in 0..image_height as usize {
-            for x in 0..image_width as usize {
-                let idx = y * image_width_p2 as usize + x;
-                msr_out[y * image_width as usize + x] = msr[idx];
-            }
-        }
-        msr_out
-    } else {
-        msr
-    };
-
-    let pft = if image_height_p2 != image_height || image_width_p2 != image_width {
-        let mut pft_out = vec![0.0f32; image_height as usize * image_width as usize];
-        for y in 0..image_height as usize {
-            for x in 0..image_width as usize {
-                let idx = y * image_width_p2 as usize + x;
-                pft_out[y * image_width as usize + x] = pft[idx];
-            }
-        }
-        pft_out
-    } else {
-        pft
-    };
-
-    let asr = if image_height_p2 != image_height || image_width_p2 != image_width {
-        let mut asr_out = vec![0.0f32; image_height as usize * image_width as usize];
-        for y in 0..image_height as usize {
-            for x in 0..image_width as usize {
-                let idx = y * image_width_p2 as usize + x;
-                asr_out[y * image_width as usize + x] = asr[idx];
-            }
-        }
-        asr_out
-    } else {
-        asr
+        spectral_residual(
+            planner,
+            &mut scratch,
+            &mod_amplitude,
+            &mod_phase,
+            w,
+            h,
+            window_radius,
+        )
     };
 
     Saliency {
-        spectral_residual: sr,
-        mod_spectral_residual: msr,
-        phase_spectrum: pft,
-        amplitude_spectrum: asr,
+        spectral_residual: crop_p2(sr, image_width, image_height, wp2, hp2),
+        mod_spectral_residual: crop_p2(msr, image_width, image_height, wp2, hp2),
+        phase_spectrum: crop_p2(pft, image_width, image_height, wp2, hp2),
+        amplitude_spectrum: crop_p2(asr, image_width, image_height, wp2, hp2),
     }
 }
 
@@ -1086,12 +827,15 @@ fn compute_saliency(
     feature = "dump-local-saliency",
     feature = "dump-weights"
 ))]
-fn dump_intermediate(name: &str, buffer: &[u8], width: u32, height: u32) {
-    use std::hash::{
-        BuildHasher,
-        Hasher,
-        RandomState,
-    };
+fn dump_intermediate(
+    name: &str,
+    buffer: &[u8],
+    width: u32,
+    height: u32,
+) {
+    use std::hash::BuildHasher;
+    use std::hash::Hasher;
+    use std::hash::RandomState;
     let rand = BuildHasher::build_hasher(&RandomState::new()).finish();
     image::save_buffer(
         format!("{name}-{rand}.png"),
@@ -1103,10 +847,15 @@ fn dump_intermediate(name: &str, buffer: &[u8], width: u32, height: u32) {
     .unwrap()
 }
 
-pub(crate) fn o_means(mut candidates: Vec<(Lab, f32)>, palette_size: usize) -> Vec<Lab> {
+const MAX_OUTER_ITERATIONS: usize = 32;
+
+pub(crate) fn o_means(
+    mut candidates: Vec<(Lab, f32)>,
+    palette_size: usize,
+) -> Vec<Lab> {
     let mut final_clusters = vec![];
 
-    loop {
+    for _ in 0..MAX_OUTER_ITERATIONS {
         let (color, weight) = candidates
             .par_iter()
             .copied()
@@ -1165,7 +914,7 @@ pub(crate) fn o_means(mut candidates: Vec<(Lab, f32)>, palette_size: usize) -> V
             }
         }
 
-        let mut cluster_assignments = vec![-1; candidates.len()];
+        let mut cluster_assignments = vec![-1i64; candidates.len()];
         candidates
             .par_iter()
             .copied()
@@ -1179,116 +928,95 @@ pub(crate) fn o_means(mut candidates: Vec<(Lab, f32)>, palette_size: usize) -> V
                 }
             });
 
-        let cluster_means = std::iter::repeat_with(|| {
-            (
-                [
-                    AtomicF32::new(0.0),
-                    AtomicF32::new(0.0),
-                    AtomicF32::new(0.0),
-                ],
-                AtomicF32::new(0.0),
-            )
-        })
-        .take(palette_size)
-        .collect::<Vec<_>>();
+        // Accumulate initial cluster means from assignments
+        let mut cluster_sums: Vec<[f32; 3]> = vec![[0.0; 3]; palette_size];
+        let mut cluster_weights: Vec<f32> = vec![0.0; palette_size];
 
-        cluster_assignments
-            .par_iter()
-            .enumerate()
-            .for_each(|(idx, &slot)| {
-                if slot > 0 {
-                    let w = candidates[idx].1;
-                    cluster_means[slot as usize].0[0]
-                        .fetch_add(candidates[idx].0.l * w, Ordering::Relaxed);
-                    cluster_means[slot as usize].0[1]
-                        .fetch_add(candidates[idx].0.a * w, Ordering::Relaxed);
-                    cluster_means[slot as usize].0[2]
-                        .fetch_add(candidates[idx].0.b * w, Ordering::Relaxed);
-                    cluster_means[slot as usize]
-                        .1
-                        .fetch_add(w, Ordering::Relaxed);
-                }
-            });
+        for (idx, &slot) in cluster_assignments.iter().enumerate() {
+            if slot >= 0 {
+                let s = slot as usize;
+                let w = candidates[idx].1;
+                cluster_sums[s][0] += candidates[idx].0.l * w;
+                cluster_sums[s][1] += candidates[idx].0.a * w;
+                cluster_sums[s][2] += candidates[idx].0.b * w;
+                cluster_weights[s] += w;
+            }
+        }
 
         for _ in 0..100 {
+            // Snapshot centroids from current means
             centroids = KdTree::<_, _, 3, 257, u32>::with_capacity(256);
 
-            for (cidx, (mean, count)) in cluster_means.iter().enumerate() {
-                let count = count.load(Ordering::Relaxed);
+            for (cidx, (sum, &count)) in cluster_sums.iter().zip(&cluster_weights).enumerate() {
                 if count > 0.0 {
                     centroids.add(
-                        &[
-                            mean[0].load(Ordering::Relaxed) / count,
-                            mean[1].load(Ordering::Relaxed) / count,
-                            mean[2].load(Ordering::Relaxed) / count,
-                        ],
+                        &[sum[0] / count, sum[1] / count, sum[2] / count],
                         cidx as u32,
                     );
                 }
             }
 
-            let shifts = candidates
+            // Compute new assignments (read-only phase)
+            let new_assignments: Vec<i64> = candidates
                 .par_iter()
                 .copied()
-                .zip(&mut cluster_assignments)
-                .map(|((color, w), slot)| {
+                .map(|(color, _)| {
                     let nearest =
                         centroids.nearest_one::<SquaredEuclidean>(&[color.l, color.a, color.b]);
 
-                    let old_slot = *slot;
-                    *slot = if nearest.distance > sigma {
+                    if nearest.distance > sigma {
                         -1
                     } else {
                         nearest.item as i64
-                    };
-
-                    if old_slot == *slot {
-                        return false;
                     }
-
-                    if old_slot >= 0 {
-                        cluster_means[old_slot as usize].0[0]
-                            .fetch_sub(color.l * w, Ordering::Relaxed);
-                        cluster_means[old_slot as usize].0[1]
-                            .fetch_sub(color.a * w, Ordering::Relaxed);
-                        cluster_means[old_slot as usize].0[2]
-                            .fetch_sub(color.b * w, Ordering::Relaxed);
-                        cluster_means[old_slot as usize]
-                            .1
-                            .fetch_sub(w, Ordering::Relaxed);
-                    }
-
-                    if *slot >= 0 {
-                        cluster_means[nearest.item as usize].0[0]
-                            .fetch_add(color.l * w, Ordering::Relaxed);
-                        cluster_means[nearest.item as usize].0[1]
-                            .fetch_add(color.a * w, Ordering::Relaxed);
-                        cluster_means[nearest.item as usize].0[2]
-                            .fetch_add(color.b * w, Ordering::Relaxed);
-                        cluster_means[nearest.item as usize]
-                            .1
-                            .fetch_add(w, Ordering::Relaxed);
-                    }
-
-                    true
                 })
-                .filter(|shift| *shift)
-                .count();
+                .collect();
+
+            // Apply deltas sequentially from assignment changes
+            let mut shifts = 0usize;
+            for (idx, (&new_slot, old_slot)) in new_assignments
+                .iter()
+                .zip(&mut cluster_assignments)
+                .enumerate()
+            {
+                if new_slot == *old_slot {
+                    continue;
+                }
+                shifts += 1;
+
+                let (color, w) = candidates[idx];
+                let wl = color.l * w;
+                let wa = color.a * w;
+                let wb = color.b * w;
+
+                if *old_slot >= 0 {
+                    let s = *old_slot as usize;
+                    cluster_sums[s][0] -= wl;
+                    cluster_sums[s][1] -= wa;
+                    cluster_sums[s][2] -= wb;
+                    cluster_weights[s] -= w;
+                }
+
+                if new_slot >= 0 {
+                    let s = new_slot as usize;
+                    cluster_sums[s][0] += wl;
+                    cluster_sums[s][1] += wa;
+                    cluster_sums[s][2] += wb;
+                    cluster_weights[s] += w;
+                }
+
+                *old_slot = new_slot;
+            }
 
             if shifts == 0 {
                 break;
             }
         }
 
-        for (sum, weight) in cluster_means.iter() {
-            let weight = weight.load(Ordering::Relaxed);
+        for (sum, &weight) in cluster_sums.iter().zip(&cluster_weights) {
             if weight > 0.0 {
                 final_clusters.push((
-                    Lab::new(
-                        sum[0].load(Ordering::Relaxed) / weight,
-                        sum[1].load(Ordering::Relaxed) / weight,
-                        sum[2].load(Ordering::Relaxed) / weight,
-                    ),
+                    Lab::new(sum[0] / weight, sum[1] / weight, sum[2] / weight),
                     weight,
                 ));
             }

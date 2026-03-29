@@ -1,41 +1,27 @@
 //! Uses k-medians to build a palette of colors.
 
-use std::{
-    collections::HashSet,
-    sync::atomic::{
-        AtomicBool,
-        Ordering,
-    },
-};
+use std::collections::HashSet;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 use atomic_float::AtomicF32;
 use dashmap::DashSet;
 use image::RgbImage;
-use kiddo::{
-    SquaredEuclidean,
-    float::kdtree::KdTree,
-};
+use kiddo::SquaredEuclidean;
+use kiddo::float::kdtree::KdTree;
 use ordered_float::OrderedFloat;
-use palette::{
-    IntoColor,
-    Lab,
-    Srgb,
-};
-use rayon::{
-    iter::{
-        IndexedParallelIterator,
-        IntoParallelRefIterator,
-        ParallelIterator,
-    },
-    slice::ParallelSliceMut,
-};
+use palette::IntoColor;
+use palette::Lab;
+use palette::Srgb;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
+use rayon::slice::ParallelSliceMut;
 
-use crate::{
-    BitPaletteBuilder,
-    PaletteBuilder,
-    private,
-    rgb_to_lab,
-};
+use crate::BitPaletteBuilder;
+use crate::PaletteBuilder;
+use crate::private;
+use crate::rgb_to_lab;
 
 pub struct KMediansPaletteBuilder;
 
@@ -44,7 +30,10 @@ impl private::Sealed for KMediansPaletteBuilder {}
 impl PaletteBuilder for KMediansPaletteBuilder {
     const NAME: &'static str = "K-Medians";
 
-    fn build_palette(image: &RgbImage, palette_size: usize) -> Vec<Lab> {
+    fn build_palette(
+        image: &RgbImage,
+        palette_size: usize,
+    ) -> Vec<Lab> {
         let candidates = image
             .pixels()
             .copied()
@@ -56,7 +45,10 @@ impl PaletteBuilder for KMediansPaletteBuilder {
     }
 }
 
-pub(crate) fn parallel_kmedians(candidates: &[(Lab, f32)], palette_size: usize) -> Vec<Lab> {
+pub(crate) fn parallel_kmedians(
+    candidates: &[(Lab, f32)],
+    palette_size: usize,
+) -> Vec<Lab> {
     let mut centroids = KdTree::<_, _, 3, 257, u32>::with_capacity(palette_size);
 
     const BUCKETS: usize = 1 << 14;

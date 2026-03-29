@@ -2,6 +2,15 @@ use std::fs::read;
 
 #[cfg(feature = "adu")]
 use a_sixel::ADUSixelEncoder;
+#[cfg(feature = "bit-merge")]
+use a_sixel::BitMergeSixelEncoder;
+#[cfg(feature = "bit-merge")]
+use a_sixel::BitMergeSixelEncoderBest;
+#[cfg(feature = "bit-merge")]
+use a_sixel::BitMergeSixelEncoderBetter;
+#[cfg(feature = "bit-merge")]
+use a_sixel::BitMergeSixelEncoderLow;
+use a_sixel::BitSixelEncoder;
 #[cfg(feature = "focal")]
 use a_sixel::FocalSixelEncoder;
 #[cfg(feature = "k-means")]
@@ -14,26 +23,12 @@ use a_sixel::MedianCutSixelEncoder;
 use a_sixel::OctreeSixelEncoder;
 #[cfg(feature = "wu")]
 use a_sixel::WuSixelEncoder;
-#[cfg(feature = "bit-merge")]
-use a_sixel::{
-    BitMergeSixelEncoder,
-    BitMergeSixelEncoderBest,
-    BitMergeSixelEncoderBetter,
-    BitMergeSixelEncoderLow,
-};
-use a_sixel::{
-    BitSixelEncoder,
-    dither::{
-        Bayer,
-        NoDither,
-        Sobol,
-    },
-};
+use a_sixel::dither::Bayer;
+use a_sixel::dither::NoDither;
+use a_sixel::dither::Sobol;
 use clap::Parser;
-use strum::{
-    Display,
-    EnumString,
-};
+use strum::Display;
+use strum::EnumString;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display)]
 #[strum(ascii_case_insensitive, serialize_all = "kebab-case")]

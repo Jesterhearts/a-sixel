@@ -19,35 +19,25 @@
 //!   agglomerative merging to produce the final palette. Time-taken scales
 //!   **quadratically** with this value.
 
-use std::{
-    cmp::Reverse,
-    collections::{
-        BinaryHeap,
-        HashSet,
-    },
-    sync::atomic::Ordering,
-};
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
+use std::collections::HashSet;
+use std::sync::atomic::Ordering;
 
 use ordered_float::OrderedFloat;
-use palette::{
-    IntoColor,
-    Lab,
-    Srgb,
-    color_difference::EuclideanDistance,
-};
-use rayon::iter::{
-    IndexedParallelIterator,
-    IntoParallelIterator,
-    IntoParallelRefIterator,
-    ParallelIterator,
-};
+use palette::IntoColor;
+use palette::Lab;
+use palette::Srgb;
+use palette::color_difference::EuclideanDistance;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 
-use crate::{
-    BitPaletteBuilder,
-    PaletteBuilder,
-    kmeans::parallel_kmeans,
-    private,
-};
+use crate::BitPaletteBuilder;
+use crate::PaletteBuilder;
+use crate::kmeans::parallel_kmeans;
+use crate::private;
 
 pub struct BitMergePaletteBuilder<
     const STAGE_1_PALETTE_SIZE: usize = { 1 << 18 },
@@ -64,7 +54,10 @@ impl<const STAGE_1_PALETTE_SIZE: usize, const STAGE_2_PALETTE_SIZE: usize> Palet
 {
     const NAME: &'static str = "Bit-Merge";
 
-    fn build_palette(image: &image::RgbImage, palette_size: usize) -> Vec<palette::Lab> {
+    fn build_palette(
+        image: &image::RgbImage,
+        palette_size: usize,
+    ) -> Vec<palette::Lab> {
         let bit = BitPaletteBuilder::new(STAGE_1_PALETTE_SIZE);
         image.par_pixels().for_each(|pixel| {
             bit.insert(palette::Srgb::<u8>::new(pixel[0], pixel[1], pixel[2]));
@@ -225,13 +218,19 @@ struct PQueueEntry {
 }
 
 impl Ord for PQueueEntry {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(
+        &self,
+        other: &Self,
+    ) -> std::cmp::Ordering {
         self.variance.cmp(&other.variance)
     }
 }
 
 impl PartialOrd for PQueueEntry {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(
+        &self,
+        other: &Self,
+    ) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }

@@ -2,27 +2,19 @@
 //! buckets. This is very fast and produces ok results for most images at larger
 //! palette sizes (e.g. 256).
 
-use std::{
-    collections::HashSet,
-    sync::atomic::{
-        AtomicU64,
-        Ordering,
-    },
-};
+use std::collections::HashSet;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 
 use dilate::DilateExpand;
 use ordered_float::OrderedFloat;
-use palette::{
-    IntoColor,
-    Lab,
-    Srgb,
-};
+use palette::IntoColor;
+use palette::Lab;
+use palette::Srgb;
 use rayon::iter::ParallelIterator;
 
-use crate::{
-    PaletteBuilder,
-    private,
-};
+use crate::PaletteBuilder;
+use crate::private;
 
 #[derive(Debug)]
 pub(crate) struct Bucket {
@@ -53,7 +45,10 @@ impl BitPaletteBuilder {
         24 - palette_size.ilog2() as usize
     }
 
-    pub(crate) fn insert(&self, color: Srgb<u8>) {
+    pub(crate) fn insert(
+        &self,
+        color: Srgb<u8>,
+    ) {
         let index = Self::index(color, self.shift);
         let node = &self.buckets[index];
         node.color.0.fetch_add(color.red as u64, Ordering::Relaxed);
@@ -64,7 +59,10 @@ impl BitPaletteBuilder {
         node.count.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub(crate) fn index(color: Srgb<u8>, shift: usize) -> usize {
+    pub(crate) fn index(
+        color: Srgb<u8>,
+        shift: usize,
+    ) -> usize {
         let r = color.red.dilate_expand::<3>().value();
         let g = color.green.dilate_expand::<3>().value();
         let b = color.blue.dilate_expand::<3>().value();
@@ -83,7 +81,10 @@ impl private::Sealed for BitPaletteBuilder {}
 impl PaletteBuilder for BitPaletteBuilder {
     const NAME: &'static str = "Bit";
 
-    fn build_palette(image: &image::RgbImage, palette_size: usize) -> Vec<Lab> {
+    fn build_palette(
+        image: &image::RgbImage,
+        palette_size: usize,
+    ) -> Vec<Lab> {
         let builder = Self::new(palette_size);
 
         image.par_pixels().for_each(|pixel| {

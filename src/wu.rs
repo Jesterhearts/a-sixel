@@ -4,34 +4,22 @@
 //! the color space along the axis of greatest variance, until the
 //! desired palette size is reached.
 
-use std::{
-    cmp::Ordering,
-    collections::{
-        BinaryHeap,
-        HashSet,
-    },
-};
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
+use std::collections::HashSet;
 
 use ndarray::Array2;
 use ordered_float::OrderedFloat;
-use palette::{
-    Lab,
-    color_difference::EuclideanDistance,
-};
-use rayon::{
-    iter::{
-        IntoParallelRefIterator,
-        ParallelIterator,
-    },
-    slice::ParallelSliceMut,
-};
+use palette::Lab;
+use palette::color_difference::EuclideanDistance;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
+use rayon::slice::ParallelSliceMut;
 use rustyml::utility::principal_component_analysis::PCA;
 
-use crate::{
-    PaletteBuilder,
-    private,
-    rgb_to_lab,
-};
+use crate::PaletteBuilder;
+use crate::private;
+use crate::rgb_to_lab;
 
 #[derive(Debug)]
 struct Hist {
@@ -132,7 +120,10 @@ impl Hist {
 }
 
 impl PartialEq for Hist {
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
         self.variance == other.variance
     }
 }
@@ -140,13 +131,19 @@ impl PartialEq for Hist {
 impl Eq for Hist {}
 
 impl PartialOrd for Hist {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    fn partial_cmp(
+        &self,
+        other: &Self,
+    ) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for Hist {
-    fn cmp(&self, other: &Self) -> Ordering {
+    fn cmp(
+        &self,
+        other: &Self,
+    ) -> Ordering {
         self.variance.cmp(&other.variance)
     }
 }
@@ -157,7 +154,10 @@ impl private::Sealed for WuPaletteBuilder {}
 impl PaletteBuilder for WuPaletteBuilder {
     const NAME: &'static str = "Wu";
 
-    fn build_palette(image: &image::RgbImage, palette_size: usize) -> Vec<Lab> {
+    fn build_palette(
+        image: &image::RgbImage,
+        palette_size: usize,
+    ) -> Vec<Lab> {
         let lab_points: Vec<Lab> = image.pixels().copied().map(rgb_to_lab).collect();
 
         let mut heap = BinaryHeap::new();

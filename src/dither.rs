@@ -9,24 +9,16 @@
 use dilate::DilateExpand;
 use image::RgbImage;
 use kiddo::float::kdtree::KdTree;
-use palette::{
-    Lab,
-    color_difference::EuclideanDistance,
-};
-use rayon::{
-    iter::{
-        IndexedParallelIterator,
-        IntoParallelIterator,
-        ParallelIterator,
-    },
-    slice::ParallelSliceMut,
-};
+use palette::Lab;
+use palette::color_difference::EuclideanDistance;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::ParallelIterator;
+use rayon::slice::ParallelSliceMut;
 use sobol_burley::sample;
 
-use crate::{
-    private,
-    rgb_to_lab,
-};
+use crate::private;
+use crate::rgb_to_lab;
 
 /// Each struct in this module implements this trait and can be combined with
 /// the [`SixelEncoder`](crate::SixelEncoder) struct to dither the result.
@@ -36,7 +28,10 @@ pub trait Dither: private::Sealed {
 
     /// Take the input image and convert it to the input palette, applying a
     /// dithering algorithm to the result.
-    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
+    fn dither_and_palettize(
+        image: &RgbImage,
+        in_palette: &[Lab],
+    ) -> Vec<usize> {
         let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
 
         let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
@@ -95,7 +90,10 @@ impl Dither for NoDither {
     const DIV: f32 = 1.0;
     const KERNEL: &[(isize, isize, f32)] = &[];
 
-    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
+    fn dither_and_palettize(
+        image: &RgbImage,
+        in_palette: &[Lab],
+    ) -> Vec<usize> {
         let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
 
         let mut palette = KdTree::<_, _, 3, 32, u32>::with_capacity(in_palette.len());
@@ -289,7 +287,10 @@ impl Dither for Bayer {
     const DIV: f32 = 0.0;
     const KERNEL: &[(isize, isize, f32)] = &[];
 
-    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
+    fn dither_and_palettize(
+        image: &RgbImage,
+        in_palette: &[Lab],
+    ) -> Vec<usize> {
         let matrix_size = image.width().max(image.height()).ilog2().max(2) as usize;
         let mut matrix = vec![0.0; matrix_size * matrix_size];
 
@@ -351,7 +352,10 @@ impl Dither for Sobol {
     const DIV: f32 = 0.0;
     const KERNEL: &[(isize, isize, f32)] = &[];
 
-    fn dither_and_palettize(image: &RgbImage, in_palette: &[Lab]) -> Vec<usize> {
+    fn dither_and_palettize(
+        image: &RgbImage,
+        in_palette: &[Lab],
+    ) -> Vec<usize> {
         let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
         for (idx, color) in in_palette.iter().enumerate() {
             palette.add(color.as_ref(), idx);

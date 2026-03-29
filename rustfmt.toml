@@ -1,6 +1,22 @@
+# You will need nightly rust to run rustfmt with these options.
+# - wrap_comments makes the code slightly nicer to read with comments and doc comments.
+# - group_imports "StdExternalCrate" groups imports into standard library, external crates,
+#   and local imports, this provides a consitent order.
+# - imports_layout "Vertical" makes each import its own line, which improves diffs.
+# - imports_granularity "Item" makes each import statement only import one item, further
+#   improving diffs.
+# - fn_params_layout "Vertical" makes each function parameter its own line, improving diffs. It
+#   would be nice if this actually worked consistently, but hey, nightly options.
+# - format_strings makes long format! and println! macros wrap their arguments
+# - format_code_in_doc_comments makes code blocks in doc comments formatted as well.
+# - reorder_impl_items makes items in impl blocks ordered consistently. If we ever get an option to
+#   alphabetize them, that would be even better.
+
 wrap_comments               = true
 group_imports               = "StdExternalCrate"
 imports_layout              = "Vertical"
-imports_granularity         = "Crate"
+imports_granularity         = "Item"
+fn_params_layout            = "Vertical"
+format_strings              = true
 format_code_in_doc_comments = true
 reorder_impl_items          = true

@@ -1,7 +1,5 @@
-use rustc_version::{
-    Channel,
-    version_meta,
-};
+use rustc_version::Channel;
+use rustc_version::version_meta;
 
 fn main() {
     println!("cargo::rustc-check-cfg=cfg(ENABLE_DOC_AUTO_CFG)");

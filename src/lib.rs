@@ -29,10 +29,8 @@
 //! ### Custom Palette Size and Dithering
 //!
 //! ```rust
-//! use a_sixel::{
-//!     BitSixelEncoder,
-//!     dither::NoDither,
-//! };
+//! use a_sixel::BitSixelEncoder;
+//! use a_sixel::dither::NoDither;
 //!
 //! let image = image::open("examples/transparent.png").unwrap().to_rgba8();
 //!
@@ -127,33 +125,21 @@ pub mod octree;
 #[cfg(feature = "wu")]
 pub mod wu;
 
-use std::{
-    fmt::Write,
-    sync::atomic::{
-        AtomicBool,
-        Ordering,
-    },
-};
+use std::fmt::Write;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
-use image::{
-    Rgb,
-    RgbImage,
-    RgbaImage,
-};
-use palette::{
-    Hsl,
-    IntoColor,
-    Lab,
-    encoding::Srgb,
-};
-use rayon::{
-    iter::{
-        IndexedParallelIterator,
-        IntoParallelRefIterator,
-        ParallelIterator,
-    },
-    slice::ParallelSlice,
-};
+use image::Rgb;
+use image::RgbImage;
+use image::RgbaImage;
+use palette::Hsl;
+use palette::IntoColor;
+use palette::Lab;
+use palette::encoding::Srgb;
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
+use rayon::slice::ParallelSlice;
 
 #[cfg(feature = "adu")]
 pub use crate::adu::ADUPaletteBuilder;
@@ -161,10 +147,9 @@ pub use crate::bit::BitPaletteBuilder;
 #[cfg(feature = "bit-merge")]
 pub use crate::bitmerge::BitMergePaletteBuilder;
 #[cfg(feature = "bit-merge")]
-use crate::dither::{
-    Dither,
-    Sierra,
-};
+use crate::dither::Dither;
+#[cfg(feature = "bit-merge")]
+use crate::dither::Sierra;
 #[cfg(feature = "focal")]
 pub use crate::focal::FocalPaletteBuilder;
 #[cfg(feature = "k-means")]
@@ -185,7 +170,10 @@ struct SixelRow<'c> {
 }
 
 impl<'c> SixelRow<'c> {
-    fn new(builder: &'c mut String, color: usize) -> Self {
+    fn new(
+        builder: &'c mut String,
+        color: usize,
+    ) -> Self {
         builder
             .write_fmt(format_args!("#{color}"))
             .expect("Failed to write color selector");
@@ -197,7 +185,10 @@ impl<'c> SixelRow<'c> {
         }
     }
 
-    fn push(&mut self, ch: char) {
+    fn push(
+        &mut self,
+        ch: char,
+    ) {
         if ch == self.pending {
             self.count += 1;
         } else {
@@ -234,7 +225,10 @@ pub trait PaletteBuilder: private::Sealed {
 
     /// Take in an image and return a quantized palette based on the colors in
     /// the image. The returned vector may be `<= palette_size` in length.
-    fn build_palette(image: &RgbImage, palette_size: usize) -> Vec<Lab>;
+    fn build_palette(
+        image: &RgbImage,
+        palette_size: usize,
+    ) -> Vec<Lab>;
 }
 
 const fn num2six(num: u8) -> char {
@@ -369,10 +363,8 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                 })
                 .unwrap_or(Rgb([0, 0, 0]));
             rgba.par_pixels_mut().for_each(|pixel| {
-                use image::{
-                    Pixel,
-                    Rgba,
-                };
+                use image::Pixel;
+                use image::Rgba;
 
                 let mut color = Rgba([bg_color[0], bg_color[1], bg_color[2], pixel[3]]);
                 color.blend(pixel);
@@ -517,11 +509,9 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
 
             #[cfg(feature = "dump-phash")]
             {
-                use image_hasher::{
-                    FilterType,
-                    HashAlg,
-                    HasherConfig,
-                };
+                use image_hasher::FilterType;
+                use image_hasher::HashAlg;
+                use image_hasher::HasherConfig;
 
                 let mut output_image = image::ImageBuffer::new(image.width(), image.height());
                 for (pixel, &idx) in output_image.pixels_mut().zip(&paletted_pixels) {
@@ -549,11 +539,9 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
 
             #[cfg(feature = "dump-image")]
             {
-                use std::hash::{
-                    BuildHasher,
-                    Hasher,
-                    RandomState,
-                };
+                use std::hash::BuildHasher;
+                use std::hash::Hasher;
+                use std::hash::RandomState;
 
                 let mut output_image = image::ImageBuffer::new(image.width(), image.height());
                 for (pixel, &idx) in output_image.pixels_mut().zip(&paletted_pixels) {
