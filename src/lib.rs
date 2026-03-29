@@ -386,7 +386,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
             P::build_palette(image, palette_size)
         };
 
-        let mut sixel_string = r#"Pq"1;1;"#.to_string();
+        let mut sixel_string = r#"P9;1q"1;1;"#.to_string();
         sixel_string
             .write_fmt(format_args!("{};{}", image.height(), image.width()))
             .expect("Failed to write sixel bounds");
