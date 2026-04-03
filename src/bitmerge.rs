@@ -19,10 +19,10 @@
 //!   agglomerative merging to produce the final palette. Time-taken scales
 //!   **quadratically** with this value.
 
+use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::collections::HashSet;
-use std::sync::atomic::Ordering;
 
 use ordered_float::OrderedFloat;
 use palette::IntoColor;
@@ -30,7 +30,6 @@ use palette::Lab;
 use palette::Srgb;
 use palette::color_difference::EuclideanDistance;
 use rayon::iter::IndexedParallelIterator;
-use rayon::iter::IntoParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 
@@ -55,33 +54,58 @@ impl<const STAGE_1_PALETTE_SIZE: usize, const STAGE_2_PALETTE_SIZE: usize> Palet
     const NAME: &'static str = "Bit-Merge";
 
     fn build_palette(
-        image: &image::RgbImage,
+        image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<palette::Lab> {
         let bit = BitPaletteBuilder::new(STAGE_1_PALETTE_SIZE);
-        image.par_pixels().for_each(|pixel| {
-            bit.insert(palette::Srgb::<u8>::new(pixel[0], pixel[1], pixel[2]));
+
+        thread_local! {
+            static PALETTE: RefCell<Vec<(u64, u64, u64, u64)>> = RefCell::default();
+        }
+
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(rayon::current_num_threads())
+            .build()
+            .unwrap();
+
+        pool.install(|| {
+            image.par_pixels().for_each(|pixel| {
+                PALETTE.with_borrow_mut(|palette| {
+                    palette.resize(palette_size, (0, 0, 0, 0));
+
+                    let pixel = Srgb::<u8>::new(pixel[0], pixel[1], pixel[2]);
+                    let index = BitPaletteBuilder::index(pixel, bit.shift);
+                    palette[index].0 += pixel.red as u64;
+                    palette[index].1 += pixel.green as u64;
+                    palette[index].2 += pixel.blue as u64;
+                    palette[index].3 += 1;
+                });
+            });
         });
 
-        let candidates = bit
-            .buckets
-            .into_par_iter()
-            .filter_map(|bucket| {
-                if bucket.count.load(Ordering::Relaxed) > 0 {
-                    let lab: Lab = Srgb::new(
-                        (bucket.color.0.load(Ordering::Relaxed)
-                            / bucket.count.load(Ordering::Relaxed)) as u8,
-                        (bucket.color.1.load(Ordering::Relaxed)
-                            / bucket.count.load(Ordering::Relaxed)) as u8,
-                        (bucket.color.2.load(Ordering::Relaxed)
-                            / bucket.count.load(Ordering::Relaxed)) as u8,
-                    )
-                    .into_format()
-                    .into_color();
-                    Some((lab, bucket.count.load(Ordering::Relaxed) as f32))
-                } else {
-                    None
-                }
+        let per_thread_palettes = pool.broadcast(|_ctx| PALETTE.with_borrow_mut(std::mem::take));
+
+        let mut final_palette = vec![(0, 0, 0, 0); palette_size];
+        for palette in per_thread_palettes {
+            for (dest, src) in final_palette.iter_mut().zip(palette) {
+                dest.0 += src.0;
+                dest.1 += src.1;
+                dest.2 += src.2;
+                dest.3 += src.3;
+            }
+        }
+
+        let candidates = final_palette
+            .into_iter()
+            .filter(|node| node.3 > 0)
+            .map(|node| {
+                let rgb = Srgb::new(
+                    (node.0 / node.3) as u8,
+                    (node.1 / node.3) as u8,
+                    (node.2 / node.3) as u8,
+                );
+                let lab: Lab = rgb.into_format().into_color();
+                (lab, node.3 as f32)
             })
             .collect::<Vec<_>>();
 

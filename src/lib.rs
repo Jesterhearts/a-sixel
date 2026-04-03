@@ -125,19 +125,14 @@ pub mod octree;
 #[cfg(feature = "wu")]
 pub mod wu;
 
-use std::fmt::Write;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-
-use image::Rgb;
-use image::RgbImage;
+use image::Rgba;
 use image::RgbaImage;
 use palette::Hsl;
 use palette::IntoColor;
 use palette::Lab;
 use palette::encoding::Srgb;
 use rayon::iter::IndexedParallelIterator;
-use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use rayon::slice::ParallelSlice;
 
@@ -146,9 +141,7 @@ pub use crate::adu::ADUPaletteBuilder;
 pub use crate::bit::BitPaletteBuilder;
 #[cfg(feature = "bit-merge")]
 pub use crate::bitmerge::BitMergePaletteBuilder;
-#[cfg(feature = "bit-merge")]
 use crate::dither::Dither;
-#[cfg(feature = "bit-merge")]
 use crate::dither::Sierra;
 #[cfg(feature = "focal")]
 pub use crate::focal::FocalPaletteBuilder;
@@ -163,59 +156,6 @@ pub use crate::octree::OctreePaletteBuilder;
 #[cfg(feature = "wu")]
 pub use crate::wu::WuPaletteBuilder;
 
-struct SixelRow<'c> {
-    committed: &'c mut String,
-    pending: char,
-    count: usize,
-}
-
-impl<'c> SixelRow<'c> {
-    fn new(
-        builder: &'c mut String,
-        color: usize,
-    ) -> Self {
-        builder
-            .write_fmt(format_args!("#{color}"))
-            .expect("Failed to write color selector");
-
-        Self {
-            committed: builder,
-            pending: num2six(0),
-            count: 0,
-        }
-    }
-
-    fn push(
-        &mut self,
-        ch: char,
-    ) {
-        if ch == self.pending {
-            self.count += 1;
-        } else {
-            self.commit();
-            self.pending = ch;
-            self.count = 1;
-        }
-    }
-
-    fn commit(&mut self) {
-        if self.count > 3 {
-            self.committed
-                .write_fmt(format_args!("!{}{}", self.count, self.pending))
-                .expect("Failed to write to string");
-        } else {
-            for _ in 0..self.count {
-                self.committed.push(self.pending);
-            }
-        }
-    }
-
-    fn finalize(mut self) {
-        self.commit();
-        self.committed.push('$');
-    }
-}
-
 mod private {
     pub trait Sealed {}
 }
@@ -226,13 +166,20 @@ pub trait PaletteBuilder: private::Sealed {
     /// Take in an image and return a quantized palette based on the colors in
     /// the image. The returned vector may be `<= palette_size` in length.
     fn build_palette(
-        image: &RgbImage,
+        image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab>;
-}
 
-const fn num2six(num: u8) -> char {
-    (0x3f + num) as char
+    /// Build a [`PaletteBucketer`](dither::PaletteBucketer) that maps pixels to
+    /// entries in the given palette. The default implementation returns a
+    /// [`KdTreeBucketer`](dither::KdTreeBucketer); palette builders with a
+    /// faster native mapping (e.g. [`BitPaletteBuilder`]) override this.
+    fn build_bucketer(
+        palette: &[Lab],
+        _palette_size: usize,
+    ) -> impl dither::PaletteBucketer {
+        dither::KdTreeBucketer::new(palette)
+    }
 }
 
 /// The main type for performing sixel encoding.
@@ -346,7 +293,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
     /// Same as [`encode`](Self::encode) - see that method's documentation for
     /// details.
     pub fn encode_with_palette_size(
-        #[allow(unused_mut)] mut rgba: RgbaImage,
+        #[allow(unused_mut)] mut image: RgbaImage,
         palette_size: usize,
     ) -> String {
         #[cfg(feature = "partial-transparency")]
@@ -362,7 +309,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                     ])
                 })
                 .unwrap_or(Rgb([0, 0, 0]));
-            rgba.par_pixels_mut().for_each(|pixel| {
+            image.par_pixels_mut().for_each(|pixel| {
                 use image::Pixel;
                 use image::Rgba;
 
@@ -371,25 +318,16 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                 *pixel = color;
             });
         }
-        let image = RgbImage::from_raw(
-            rgba.width(),
-            rgba.height(),
-            rgba.pixels()
-                .flat_map(|p| [p[0], p[1], p[2]])
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-        let image = &image;
         let palette = if image.width().saturating_mul(image.height()) < palette_size as u32 {
-            image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>()
+            image.pixels().copied().map(rgba_to_lab).collect::<Vec<_>>()
         } else {
-            P::build_palette(image, palette_size)
+            P::build_palette(&image, palette_size)
         };
 
         let mut sixel_string = r#"P9;1q"1;1;"#.to_string();
-        sixel_string
-            .write_fmt(format_args!("{};{}", image.width(), image.height()))
-            .expect("Failed to write sixel bounds");
+        push_usize(&mut sixel_string, image.width() as usize);
+        sixel_string.push(';');
+        push_usize(&mut sixel_string, image.height() as usize);
 
         if image.width() > 0 && image.height() > 0 {
             for (i, lab) in palette.iter().copied().enumerate() {
@@ -397,16 +335,18 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                 // Sixel hue is offset by 120 degrees from the common hue values.
                 let deg = (hsl.hue.into_positive_degrees().round() as u16 + 120) % 360;
 
-                sixel_string
-                    .write_fmt(format_args!(
-                        "#{i};1;{deg};{};{}",
-                        (hsl.lightness * 100.0).round() as u8,
-                        (hsl.saturation * 100.0).round() as u8,
-                    ))
-                    .expect("Failed to palette entry");
+                sixel_string.push('#');
+                push_usize(&mut sixel_string, i);
+                sixel_string.push_str(";1;");
+                push_usize(&mut sixel_string, deg as usize);
+                sixel_string.push(';');
+                push_usize(&mut sixel_string, (hsl.lightness * 100.0).round() as usize);
+                sixel_string.push(';');
+                push_usize(&mut sixel_string, (hsl.saturation * 100.0).round() as usize);
             }
 
-            let paletted_pixels = D::dither_and_palettize(image, &palette);
+            let bucketer = P::build_bucketer(&palette, palette_size);
+            let paletted_pixels = D::dither_and_palettize(&image, &palette, &bucketer);
 
             #[cfg(feature = "dump-mse")]
             {
@@ -419,7 +359,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                     .zip(image.par_pixels())
                     .map(|(l, rgb)| {
                         use palette::color_difference::EuclideanDistance;
-                        let lab = rgb_to_lab(*rgb);
+                        let lab = rgba_to_lab(*rgb);
                         lab.distance_squared(*l)
                     })
                     .sum::<f32>()
@@ -440,7 +380,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                     .zip(dequant.par_iter())
                     .map(|(rgb, lab)| {
                         use palette::color_difference::ImprovedCiede2000;
-                        let lab_rgb = rgb_to_lab(rgb);
+                        let lab_rgb = rgba_to_lab(rgb);
                         lab_rgb.improved_difference(*lab)
                     })
                     .collect::<Vec<_>>();
@@ -557,69 +497,47 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                     .expect("Failed to save output image");
             }
 
-            let rgba_pixels = rgba.pixels().collect::<Vec<_>>();
-            let rows = paletted_pixels
-                .chunks(image.width() as usize)
-                .zip(rgba_pixels.chunks(image.width() as usize))
-                .collect::<Vec<_>>();
+            let width = image.width() as usize;
 
-            let mut strings = vec![String::new(); rows.len().div_ceil(6)];
-            rows.par_chunks(6)
+            let num_chunks = (paletted_pixels.len() / width).div_ceil(6);
+            let chunk_capacity = width * 7;
+            let mut strings =
+                Vec::from_iter((0..num_chunks).map(|_| String::with_capacity(chunk_capacity)));
+
+            paletted_pixels
+                .par_chunks(width * 6)
+                .zip(image.into_raw().par_chunks(width * 6 * 4))
                 .zip(&mut strings)
-                .for_each(|(stack, sixel_string)| {
-                    let row_palette =
-                        Vec::from_iter((0..palette_size).map(|_| AtomicBool::new(false)));
-                    stack
-                        .par_iter()
-                        .flat_map(|(row, _)| row.par_iter().copied())
-                        .for_each(|idx| {
-                            row_palette[idx].store(true, Ordering::Relaxed);
-                        });
+                .for_each(|((palette_chunk, rgba_chunk), sixel_string)| {
+                    let mut color_bits = vec![0u8; palette_size * width];
+                    let mut color_used = vec![false; palette_size];
+                    let chunk_height = palette_chunk.len() / width;
 
-                    for (color, _) in row_palette
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, v)| v.load(Ordering::Relaxed))
-                    {
-                        let mut stack_string = SixelRow::new(sixel_string, color);
-                        for idx in 0..stack[0].0.len() {
-                            let bit0 = (stack[0].0[idx] == color && stack[0].1[idx][3] != 0) as u8;
-                            let bit1 = (stack
-                                .get(1)
-                                .filter(|(_, v)| v[idx][3] != 0)
-                                .map(|(r, _)| r[idx])
-                                == Some(color)) as u8;
-                            let bit2 = (stack
-                                .get(2)
-                                .filter(|(_, v)| v[idx][3] != 0)
-                                .map(|(r, _)| r[idx])
-                                == Some(color)) as u8;
-                            let bit3 = (stack
-                                .get(3)
-                                .filter(|(_, v)| v[idx][3] != 0)
-                                .map(|(r, _)| r[idx])
-                                == Some(color)) as u8;
-                            let bit4 = (stack
-                                .get(4)
-                                .filter(|(_, v)| v[idx][3] != 0)
-                                .map(|(r, _)| r[idx])
-                                == Some(color)) as u8;
-                            let bit5 = (stack
-                                .get(5)
-                                .filter(|(_, v)| v[idx][3] != 0)
-                                .map(|(r, _)| r[idx])
-                                == Some(color)) as u8;
-
-                            let bits = bit0
-                                | (bit1 << 1)
-                                | (bit2 << 2)
-                                | (bit3 << 3)
-                                | (bit4 << 4)
-                                | (bit5 << 5);
-                            let char = num2six(bits);
-                            stack_string.push(char);
+                    for row in 0..chunk_height {
+                        let bit = 1u8 << row;
+                        let row_offset = row * width;
+                        for col in 0..width {
+                            let pixel_idx = row_offset + col;
+                            if rgba_chunk[pixel_idx * 4 + 3] != 0 {
+                                let color = palette_chunk[pixel_idx];
+                                color_bits[color * width + col] |= bit;
+                                color_used[color] = true;
+                            }
                         }
-                        stack_string.finalize();
+                    }
+
+                    color_bits.par_iter_mut().for_each(|d| {
+                        *d += 0x3f;
+                    });
+                    // SAFETY: 0x3f..=0x7e are valid ASCII bytes
+                    let color_bits = unsafe { String::from_utf8_unchecked(color_bits) };
+
+                    for (color, _) in color_used.iter().enumerate().filter(|(_, u)| **u) {
+                        sixel_string.push('#');
+                        push_usize(sixel_string, color);
+                        let base = color * width;
+                        sixel_string.push_str(&color_bits[base..base + width]);
+                        sixel_string.push('$');
                     }
                     sixel_string.push('-');
                 });
@@ -631,8 +549,16 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
         sixel_string
     }
 }
-fn rgb_to_lab(Rgb([r, g, b]): Rgb<u8>) -> Lab {
+
+fn rgba_to_lab(Rgba([r, g, b, _]): Rgba<u8>) -> Lab {
     palette::rgb::Rgb::<Srgb, _>::new(r, g, b)
         .into_format::<f32>()
         .into_color()
+}
+
+fn push_usize(
+    s: &mut String,
+    n: usize,
+) {
+    s.push_str(itoa::Buffer::new().format(n));
 }

@@ -7,7 +7,8 @@
 //! and a Sobol sequence based dithering algorithm.
 
 use dilate::DilateExpand;
-use image::RgbImage;
+use image::Rgba;
+use image::RgbaImage;
 use kiddo::float::kdtree::KdTree;
 use palette::Lab;
 use palette::color_difference::EuclideanDistance;
@@ -18,7 +19,77 @@ use rayon::slice::ParallelSliceMut;
 use sobol_burley::sample;
 
 use crate::private;
-use crate::rgb_to_lab;
+use crate::rgba_to_lab;
+
+/// Abstracts nearest-neighbor palette lookup, allowing different strategies
+/// (e.g. KD-tree vs. direct bucket lookup) to be used interchangeably.
+pub trait PaletteBucketer: Sync + private::Sealed {
+    /// Find the nearest palette entry for a point in Lab color space.
+    fn nearest(
+        &self,
+        point: &[f32; 3],
+    ) -> usize;
+
+    /// Find the two nearest palette entries for a point in Lab color space,
+    /// returned as `(palette_index, squared_distance)` pairs ordered nearest
+    /// first. Used by ordered-dithering algorithms that interpolate between
+    /// the two closest colors.
+    fn nearest_two(
+        &self,
+        point: Rgba<u8>,
+    ) -> [(usize, f32); 2];
+
+    /// Find the nearest palette entry for an RGB pixel. The default
+    /// implementation converts to Lab and delegates to
+    /// [`nearest`](Self::nearest), but implementations may override this
+    /// for a faster path that avoids the color-space conversion entirely.
+    fn nearest_rgb(
+        &self,
+        pixel: Rgba<u8>,
+    ) -> usize {
+        let lab = rgba_to_lab(pixel);
+        self.nearest(lab.as_ref())
+    }
+}
+
+/// A [`PaletteBucketer`] backed by a KD-tree for nearest-neighbor queries in
+/// Lab color space.
+pub struct KdTreeBucketer(KdTree<f32, usize, 3, 257, u32>);
+
+impl KdTreeBucketer {
+    pub fn new(palette: &[Lab]) -> Self {
+        let mut tree = KdTree::with_capacity(palette.len());
+        for (idx, color) in palette.iter().enumerate() {
+            tree.add(color.as_ref(), idx);
+        }
+        Self(tree)
+    }
+}
+
+impl private::Sealed for KdTreeBucketer {}
+
+impl PaletteBucketer for KdTreeBucketer {
+    fn nearest(
+        &self,
+        point: &[f32; 3],
+    ) -> usize {
+        self.0.nearest_one::<kiddo::SquaredEuclidean>(point).item
+    }
+
+    fn nearest_two(
+        &self,
+        point: Rgba<u8>,
+    ) -> [(usize, f32); 2] {
+        let point = rgba_to_lab(point);
+        let point = [point.l, point.a, point.b];
+        let [l1, l2] = self
+            .0
+            .nearest_n::<kiddo::SquaredEuclidean>(&point, 2)
+            .try_into()
+            .unwrap();
+        [(l1.item, l1.distance), (l2.item, l2.distance)]
+    }
+}
 
 /// Each struct in this module implements this trait and can be combined with
 /// the [`SixelEncoder`](crate::SixelEncoder) struct to dither the result.
@@ -29,16 +100,11 @@ pub trait Dither: private::Sealed {
     /// Take the input image and convert it to the input palette, applying a
     /// dithering algorithm to the result.
     fn dither_and_palettize(
-        image: &RgbImage,
+        image: &RgbaImage,
         in_palette: &[Lab],
+        bucketer: &impl PaletteBucketer,
     ) -> Vec<usize> {
-        let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
-
-        let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
-
-        for (idx, color) in in_palette.iter().enumerate() {
-            palette.add(color.as_ref(), idx);
-        }
+        let pixels = image.pixels().copied().map(rgba_to_lab).collect::<Vec<_>>();
 
         let mut result = vec![0; image.width() as usize * image.height() as usize];
 
@@ -51,15 +117,14 @@ pub trait Dither: private::Sealed {
                 p.b + spills[idx][2],
             );
 
-            let palette_idx =
-                palette.nearest_one::<kiddo::SquaredEuclidean>(&[pixel.l, pixel.a, pixel.b]);
+            let palette_idx = bucketer.nearest(&[pixel.l, pixel.a, pixel.b]);
 
-            let error0 = pixel.l - in_palette[palette_idx.item].l;
-            let error1 = pixel.a - in_palette[palette_idx.item].a;
-            let error2 = pixel.b - in_palette[palette_idx.item].b;
+            let error0 = pixel.l - in_palette[palette_idx].l;
+            let error1 = pixel.a - in_palette[palette_idx].a;
+            let error2 = pixel.b - in_palette[palette_idx].b;
             let spill = [error0, error1, error2];
 
-            result[idx] = palette_idx.item;
+            result[idx] = palette_idx;
 
             for (dx, dy, m) in Self::KERNEL {
                 let x = idx as isize % image.width() as isize + dx;
@@ -91,26 +156,14 @@ impl Dither for NoDither {
     const KERNEL: &[(isize, isize, f32)] = &[];
 
     fn dither_and_palettize(
-        image: &RgbImage,
-        in_palette: &[Lab],
+        image: &RgbaImage,
+        _in_palette: &[Lab],
+        bucketer: &impl PaletteBucketer,
     ) -> Vec<usize> {
-        let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
-
-        let mut palette = KdTree::<_, _, 3, 32, u32>::with_capacity(in_palette.len());
-
-        for (idx, color) in in_palette.iter().enumerate() {
-            palette.add(color.as_ref(), idx);
-        }
-
         let mut result = vec![0; image.width() as usize * image.height() as usize];
-        pixels
-            .into_par_iter()
-            .zip(&mut result)
-            .for_each(|(p, dest)| {
-                *dest = palette
-                    .nearest_one::<kiddo::SquaredEuclidean>(&[p.l, p.a, p.b])
-                    .item;
-            });
+        image.par_pixels().zip(&mut result).for_each(|(p, dest)| {
+            *dest = bucketer.nearest_rgb(*p);
+        });
 
         result
     }
@@ -288,8 +341,9 @@ impl Dither for Bayer {
     const KERNEL: &[(isize, isize, f32)] = &[];
 
     fn dither_and_palettize(
-        image: &RgbImage,
+        image: &RgbaImage,
         in_palette: &[Lab],
+        bucketer: &impl PaletteBucketer,
     ) -> Vec<usize> {
         let matrix_size = image.width().max(image.height()).ilog2().max(2) as usize;
         let mut matrix = vec![0.0; matrix_size * matrix_size];
@@ -307,35 +361,25 @@ impl Dither for Bayer {
                 }
             });
 
-        let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
-        for (idx, color) in in_palette.iter().enumerate() {
-            palette.add(color.as_ref(), idx);
-        }
-
         let mut result = vec![0; image.width() as usize * image.height() as usize];
-        let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
-
-        pixels
-            .into_par_iter()
+        image
+            .par_pixels()
             .enumerate()
             .zip(&mut result)
             .for_each(|((idx, p), dest)| {
                 let x = (idx % image.width() as usize) % matrix_size;
                 let y = (idx / image.width() as usize) % matrix_size;
 
-                let [l1, l2] = palette
-                    .nearest_n::<kiddo::SquaredEuclidean>(p.as_ref(), 2)
-                    .try_into()
-                    .unwrap();
+                let [(l1_item, l1_dist), (l2_item, l2_dist)] = bucketer.nearest_two(*p);
 
-                let p_dist = in_palette[l1.item].distance_squared(in_palette[l2.item]);
-                let t = ((l1.distance - l2.distance + p_dist) / (2.0 * p_dist)).clamp(0.0, 1.0);
+                let p_dist = in_palette[l1_item].distance_squared(in_palette[l2_item]);
+                let t = ((l1_dist - l2_dist + p_dist) / (2.0 * p_dist)).clamp(0.0, 1.0);
 
                 let m_idx = x + y * matrix_size;
                 if t > matrix[m_idx] {
-                    *dest = l2.item;
+                    *dest = l2_item;
                 } else {
-                    *dest = l1.item;
+                    *dest = l1_item;
                 }
             });
 
@@ -353,36 +397,27 @@ impl Dither for Sobol {
     const KERNEL: &[(isize, isize, f32)] = &[];
 
     fn dither_and_palettize(
-        image: &RgbImage,
+        image: &RgbaImage,
         in_palette: &[Lab],
+        bucketer: &impl PaletteBucketer,
     ) -> Vec<usize> {
-        let mut palette = KdTree::<_, _, 3, 257, u32>::with_capacity(in_palette.len());
-        for (idx, color) in in_palette.iter().enumerate() {
-            palette.add(color.as_ref(), idx);
-        }
-
         let mut result = vec![0; image.width() as usize * image.height() as usize];
-        let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
-
-        pixels
-            .into_par_iter()
+        image
+            .par_pixels()
             .enumerate()
             .zip(&mut result)
             .for_each(|((idx, p), dest)| {
                 let thresh = sample(idx as u32 % (1 << 16), 0, idx as u32 / (1 << 16));
 
-                let [l1, l2] = palette
-                    .nearest_n::<kiddo::SquaredEuclidean>(p.as_ref(), 2)
-                    .try_into()
-                    .unwrap();
+                let [(l1_item, l1_dist), (l2_item, l2_dist)] = bucketer.nearest_two(*p);
 
-                let p_dist = in_palette[l1.item].distance_squared(in_palette[l2.item]);
-                let t = ((l1.distance - l2.distance + p_dist) / (2.0 * p_dist)).clamp(0.0, 1.0);
+                let p_dist = in_palette[l1_item].distance_squared(in_palette[l2_item]);
+                let t = ((l1_dist - l2_dist + p_dist) / (2.0 * p_dist)).clamp(0.0, 1.0);
 
                 if t > thresh {
-                    *dest = l2.item;
+                    *dest = l2_item;
                 } else {
-                    *dest = l1.item;
+                    *dest = l1_item;
                 }
             });
 

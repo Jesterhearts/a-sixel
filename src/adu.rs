@@ -11,7 +11,7 @@
 
 use std::collections::HashSet;
 
-use image::RgbImage;
+use image::RgbaImage;
 use kiddo::SquaredEuclidean;
 use kiddo::float::kdtree::KdTree;
 use ordered_float::OrderedFloat;
@@ -22,7 +22,7 @@ use sobol_burley::sample_4d;
 
 use crate::PaletteBuilder;
 use crate::private;
-use crate::rgb_to_lab;
+use crate::rgba_to_lab;
 
 pub struct ADUPaletteBuilder;
 
@@ -31,7 +31,7 @@ impl PaletteBuilder for ADUPaletteBuilder {
     const NAME: &'static str = "ADU";
 
     fn build_palette(
-        image: &RgbImage,
+        image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {
         let theta = (400.0 * (palette_size as f32).sqrt()) as usize;
@@ -39,7 +39,7 @@ impl PaletteBuilder for ADUPaletteBuilder {
 
         let gamma: f32 = 1.0 / 64.0;
 
-        let candidates = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
+        let candidates = image.pixels().copied().map(rgba_to_lab).collect::<Vec<_>>();
 
         let centroid = candidates.par_iter().copied().reduce(
             || <Lab>::new(0.0, 0.0, 0.0),

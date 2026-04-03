@@ -3,7 +3,6 @@
 use std::sync::atomic::Ordering;
 
 use atomic_float::AtomicF32;
-use image::RgbImage;
 use kiddo::SquaredEuclidean;
 use kiddo::float::kdtree::KdTree;
 use ordered_float::OrderedFloat;
@@ -18,7 +17,7 @@ use rayon::iter::ParallelIterator;
 use crate::BitPaletteBuilder;
 use crate::PaletteBuilder;
 use crate::private;
-use crate::rgb_to_lab;
+use crate::rgba_to_lab;
 
 /// Performs K-Means clustering on the image's pixels to build a palette.
 pub struct KMeansPaletteBuilder;
@@ -29,13 +28,13 @@ impl PaletteBuilder for KMeansPaletteBuilder {
     const NAME: &'static str = "K-Means";
 
     fn build_palette(
-        image: &RgbImage,
+        image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {
         let candidates = image
             .pixels()
             .copied()
-            .map(rgb_to_lab)
+            .map(rgba_to_lab)
             .map(|c| (c, 1.0))
             .collect::<Vec<_>>();
 

@@ -1,73 +1,102 @@
 [package]
 name        = "a-sixel"
-version     = "0.6.1"
+version     = "0.7.0"
 edition     = "2024"
-license     = "MIT OR Apache-2.0"
 description = "A small sixel + palette selection + dithering library."
-keywords    = [ "sixel", "terminal", "encoding", "quantization", "dithering" ]
 readme      = "README.md"
 repository  = "https://github.com/Jesterhearts/a-sixel"
-exclude     = [ "test_images" ]
+license     = "MIT OR Apache-2.0"
+keywords    = ["dithering", "encoding", "quantization", "sixel", "terminal"]
+exclude     = ["test_images"]
 
-[features]
-default              = [ "adu", "bit-merge", "focal", "k-means" ]
-all-algorithms       = [ "adu", "bit-merge", "focal", "k-means", "k-medians", "median-cut", "octree", "wu" ]
-adu                  = [  ]
-bit-merge            = [ "k-means" ]
-focal                = [ "k-means", "dep:libblur", "dep:rustfft", "dep:atomic_float" ]
-k-means              = [ "dep:atomic_float" ]
-k-medians            = [ "dep:dashmap", "dep:atomic_float" ]
-median-cut           = [  ]
-octree               = [  ]
-wu                   = [ "dep:ndarray", "dep:rustyml" ]
-partial-transparency = [ "dep:termbg" ]
-# For debugging -- maps the saliency scores used to determine color weights to a greyscale image and dumps each map to a file.
-dump-saliency       = [ "dump-l-saliency", "dump-a-saliency", "dump-b-saliency", "dump-local-saliency", "dump-weights" ]
-dump-l-saliency     = [  ]
-dump-a-saliency     = [  ]
-dump-b-saliency     = [  ]
-dump-local-saliency = [  ]
-dump-weights        = [  ]
-# For debugging -- prints the MSE of the quantized image vs the original image.
-dump-mse = [  ]
-# For debugging -- prints the mean & threshold Delta E of the quantized image vs the original image.
-dump-delta-e = [  ]
-# For debugging -- dumps the dssim score of the quantized image vs the original image.
-dump-dssim = [ "dep:dssim-core", "dep:rgb" ]
-# For debugging -- dumps the hamming distanced of the quantized image's phash vs the original image's phash.
-dump-phash = [ "dep:image_hasher" ]
-# For debugging -- dumps the quantized image to a file with a random file name.
-dump-image = [  ]
-# Enables the nightly `doc_auto_cfg` feature.
-ENABLE_DOC_AUTO_CFG = [  ]
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 atomic_float  = { version = "1.1.0", optional = true }
-dashmap       = { version = "6.1.0", optional = true, features = [ "rayon" ] }
+dashmap       = { version = "6.1.0", features = ["rayon"], optional = true }
 dilate        = "0.6.3"
 dssim-core    = { version = "3.4.0", optional = true }
-image         = { version = "0.25.8", default-features = false, features = [ "rayon" ] }
+image         = { version = "0.25.8", default-features = false, features = [
+  "rayon"
+] }
 image_hasher  = { version = "3.0.0", optional = true }
+itoa          = "1.0.18"
 kiddo         = "5.2.2"
 libblur       = { version = "0.23.3", optional = true }
 ndarray       = { version = "0.17.2", optional = true }
 ordered-float = "5.1.0"
-palette       = { version = "0.7.6", default-features = false, features = [ "std" ] }
-rustyml       = { version = "0.11.0", optional = true, features = [ "utility" ] }
+palette       = { version = "0.7.6", default-features = false, features = [
+  "std"
+] }
 rayon         = "1.11.0"
 rgb           = { version = "0.8.52", optional = true }
 rustfft       = { version = "6.4.1", optional = true }
+rustyml       = { version = "0.11.0", features = ["utility"], optional = true }
 sobol_burley  = "0.5.0"
 termbg        = { version = "0.6.2", optional = true }
 
 [dev-dependencies]
 anyhow = "1.0.100"
-clap   = { version = "4.5.48", features = [ "derive" ] }
+clap   = { version = "4.5.48", features = ["derive"] }
 image  = "0.25.8"
-strum  = { version = "0.28.0", features = [ "derive" ] }
+strum  = { version = "0.28.0", features = ["derive"] }
 
 [build-dependencies]
 rustc_version = "0.4.1"
 
-[package.metadata.docs.rs]
-all-features = true
+[features]
+default              = ["adu", "bit-merge", "k-means"]
+# Enables the nightly `doc_auto_cfg` feature.
+ENABLE_DOC_AUTO_CFG  = []
+adu                  = []
+all-algorithms       = [
+  "adu",
+  "bit-merge",
+  "focal",
+  "k-means",
+  "k-medians",
+  "median-cut",
+  "octree",
+  "wu"
+]
+bit-merge            = ["k-means"]
+dump-a-saliency      = []
+dump-b-saliency      = []
+# For debugging -- prints the mean & threshold Delta E of the quantized image vs the original image.
+dump-delta-e         = []
+# For debugging -- dumps the dssim score of the quantized image vs the original image.
+dump-dssim           = ["dep:dssim-core", "dep:rgb"]
+# For debugging -- dumps the quantized image to a file with a random file name.
+dump-image           = []
+dump-l-saliency      = []
+dump-local-saliency  = []
+# For debugging -- prints the MSE of the quantized image vs the original image.
+dump-mse             = []
+# For debugging -- dumps the hamming distanced of the quantized image's phash vs the original image's phash.
+dump-phash           = ["dep:image_hasher"]
+# For debugging -- maps the saliency scores used to determine color weights to a greyscale image and dumps each map to a file.
+dump-saliency        = [
+  "dump-a-saliency",
+  "dump-b-saliency",
+  "dump-l-saliency",
+  "dump-local-saliency",
+  "dump-weights"
+]
+dump-weights         = []
+focal                = [
+  "dep:atomic_float",
+  "dep:libblur",
+  "dep:rustfft",
+  "k-means"
+]
+k-means              = ["dep:atomic_float"]
+k-medians            = ["dep:atomic_float", "dep:dashmap"]
+median-cut           = []
+octree               = []
+partial-transparency = ["dep:termbg"]
+wu                   = ["dep:ndarray", "dep:rustyml"]
+
+[profile.release-debug]
+inherits = "release"
+debug    = true
