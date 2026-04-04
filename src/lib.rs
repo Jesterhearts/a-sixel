@@ -104,7 +104,7 @@
 //! | median-cut       | 164.52 | 0.0374 |          45.28 |    4.68 |  16.72 |   73.7% |   42.3% |                 395 |
 //! | octree           | 459.37 | 0.0845 |          75.03 |    7.69 |  18.87 |   98.3% |   73.5% |                 477 |
 //! | wu               | 125.84 | 0.0386 |          50.52 |    4.48 |  16.70 |   74.5% |   39.2% |                 929 |
-#![cfg_attr(all(doc, ENABLE_DOC_AUTO_CFG), feature(doc_auto_cfg))]
+#![cfg_attr(all(doc, ENABLE_DOC_AUTO_CFG), feature(doc_cfg))]
 
 #[cfg(feature = "adu")]
 pub mod adu;
