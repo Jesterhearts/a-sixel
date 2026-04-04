@@ -20,7 +20,7 @@ use rustyml::utility::principal_component_analysis::PCA;
 
 use crate::PaletteBuilder;
 use crate::private;
-use crate::rgb_to_lab;
+use crate::rgba_to_lab;
 
 #[derive(Debug)]
 struct Hist {
@@ -156,10 +156,10 @@ impl PaletteBuilder for WuPaletteBuilder {
     const NAME: &'static str = "Wu";
 
     fn build_palette(
-        image: &image::RgbImage,
+        image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {
-        let lab_points: Vec<Lab> = image.pixels().copied().map(rgb_to_lab).collect();
+        let lab_points: Vec<Lab> = image.pixels().copied().map(rgba_to_lab).collect();
 
         let mut heap = BinaryHeap::new();
         heap.push(Hist::new(lab_points));

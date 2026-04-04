@@ -10,7 +10,7 @@
 //!
 //! The resulting palette is the average color of each bucket.
 
-use image::RgbImage;
+use image::RgbaImage;
 use ordered_float::OrderedFloat;
 use palette::Lab;
 use rayon::iter::IndexedParallelIterator;
@@ -21,7 +21,7 @@ use rayon::slice::ParallelSliceMut;
 
 use crate::PaletteBuilder;
 use crate::private;
-use crate::rgb_to_lab;
+use crate::rgba_to_lab;
 
 pub struct MedianCutPaletteBuilder;
 impl private::Sealed for MedianCutPaletteBuilder {}
@@ -29,10 +29,10 @@ impl PaletteBuilder for MedianCutPaletteBuilder {
     const NAME: &'static str = "Median-Cut";
 
     fn build_palette(
-        image: &RgbImage,
+        image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {
-        let pixels = image.pixels().copied().map(rgb_to_lab).collect::<Vec<_>>();
+        let pixels = image.pixels().copied().map(rgba_to_lab).collect::<Vec<_>>();
 
         let mut buckets = Vec::with_capacity(palette_size);
         buckets.push(pixels);

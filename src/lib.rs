@@ -302,13 +302,14 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
 
             let bg_color = termbg::rgb(Duration::from_millis(100))
                 .map(|rgb| {
-                    Rgb([
+                    Rgba([
                         (rgb.r as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
                         (rgb.g as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
                         (rgb.b as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
+                        u8::MAX,
                     ])
                 })
-                .unwrap_or(Rgb([0, 0, 0]));
+                .unwrap_or(Rgba([0, 0, 0, u8::MAX]));
             image.par_pixels_mut().for_each(|pixel| {
                 use image::Pixel;
                 use image::Rgba;
@@ -350,6 +351,8 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
 
             #[cfg(feature = "dump-mse")]
             {
+                use rayon::iter::IntoParallelRefIterator;
+
                 let dequant = paletted_pixels
                     .iter()
                     .map(|&idx| palette[idx])
@@ -370,6 +373,8 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
 
             #[cfg(feature = "dump-delta-e")]
             {
+                use rayon::iter::IntoParallelRefIterator;
+
                 let dequant = paletted_pixels
                     .iter()
                     .map(|&idx| palette[idx])
@@ -415,7 +420,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                 let image_pixels = image
                     .pixels()
                     .copied()
-                    .map(|Rgb([r, g, b])| rgb::RGB::new(r, g, b))
+                    .map(|Rgba([r, g, b, _])| rgb::RGB::new(r, g, b))
                     .collect::<Vec<_>>();
                 let orig = dssim
                     .create_image_rgb(
@@ -458,7 +463,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                     let lab = palette[idx];
                     let rgb: palette::Srgb = lab.into_color();
                     let rgb = rgb.into_format::<u8>();
-                    *pixel = Rgb([rgb.red, rgb.green, rgb.blue]);
+                    *pixel = Rgba([rgb.red, rgb.green, rgb.blue, u8::MAX]);
                 }
 
                 let hasher = HasherConfig::new()
@@ -467,7 +472,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                     .hash_size(32, 32)
                     .to_hasher();
 
-                let hash_in = hasher.hash_image(image);
+                let hash_in = hasher.hash_image(&image);
                 let hash_out = hasher.hash_image(&output_image);
 
                 println!(
@@ -488,7 +493,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                     let lab = palette[idx];
                     let rgb: palette::Srgb = lab.into_color();
                     let rgb = rgb.into_format::<u8>();
-                    *pixel = Rgb([rgb.red, rgb.green, rgb.blue]);
+                    *pixel = Rgba([rgb.red, rgb.green, rgb.blue, u8::MAX]);
                 }
                 let rand = BuildHasher::build_hasher(&RandomState::new()).finish();
 

@@ -28,8 +28,8 @@ use std::f32::consts::PI;
 use std::sync::atomic::Ordering;
 
 use atomic_float::AtomicF32;
-use image::Rgb;
-use image::RgbImage;
+use image::Rgba;
+use image::RgbaImage;
 use kiddo::SquaredEuclidean;
 use kiddo::float::kdtree::KdTree;
 use libblur::AnisotropicRadius;
@@ -56,7 +56,7 @@ use crate::BitPaletteBuilder;
 use crate::PaletteBuilder;
 use crate::kmeans::parallel_kmeans;
 use crate::private;
-use crate::rgb_to_lab;
+use crate::rgba_to_lab;
 
 fn par_min_max(data: &[f32]) -> (f32, f32) {
     data.par_iter()
@@ -124,7 +124,7 @@ impl PaletteBuilder for FocalPaletteBuilder {
     const NAME: &'static str = "Focal";
 
     fn build_palette(
-        image: &RgbImage,
+        image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {
         let image_width = image.width();
@@ -134,8 +134,8 @@ impl PaletteBuilder for FocalPaletteBuilder {
         let mut pixels =
             vec![<Lab>::new(0.0, 0.0, 0.0); image_width as usize * image_height as usize];
 
-        image.par_chunks(3).zip(&mut pixels).for_each(|(p, dest)| {
-            *dest = rgb_to_lab(Rgb([p[0], p[1], p[2]]));
+        image.par_chunks(4).zip(&mut pixels).for_each(|(p, dest)| {
+            *dest = rgba_to_lab(Rgba([p[0], p[1], p[2], p[3]]));
         });
 
         let window_radius = (pixels.len() as f32).ln().clamp(2.0, 16.0) as u32 / 2;

@@ -128,7 +128,7 @@ impl<const USE_MIN_HEAP: bool> PaletteBuilder for OctreePaletteBuilder<USE_MIN_H
     const NAME: &'static str = "Octree";
 
     fn build_palette(
-        image: &image::RgbImage,
+        image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<palette::Lab> {
         let mut octree = OctreePaletteBuilder::<USE_MIN_HEAP>::new();

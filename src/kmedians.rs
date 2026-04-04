@@ -6,7 +6,7 @@ use std::sync::atomic::Ordering;
 
 use atomic_float::AtomicF32;
 use dashmap::DashSet;
-use image::RgbImage;
+use image::RgbaImage;
 use kiddo::SquaredEuclidean;
 use kiddo::float::kdtree::KdTree;
 use ordered_float::OrderedFloat;
@@ -21,7 +21,7 @@ use rayon::slice::ParallelSliceMut;
 use crate::BitPaletteBuilder;
 use crate::PaletteBuilder;
 use crate::private;
-use crate::rgb_to_lab;
+use crate::rgba_to_lab;
 
 pub struct KMediansPaletteBuilder;
 
@@ -31,13 +31,13 @@ impl PaletteBuilder for KMediansPaletteBuilder {
     const NAME: &'static str = "K-Medians";
 
     fn build_palette(
-        image: &RgbImage,
+        image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {
         let candidates = image
             .pixels()
             .copied()
-            .map(rgb_to_lab)
+            .map(rgba_to_lab)
             .map(|l| (l, 1.0))
             .collect::<Vec<_>>();
 
