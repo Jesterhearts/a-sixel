@@ -12,8 +12,14 @@ exclude     = ["test_images"]
 [package.metadata.docs.rs]
 all-features = true
 
+[[bin]]
+name              = "a-sixel"
+required-features = ["cli"]
+
 [dependencies]
+anyhow        = { version = "1.0.100", optional = true }
 atomic_float  = { version = "1.1.0", optional = true }
+clap          = { version = "4.5.48", features = ["derive"], optional = true }
 dashmap       = { version = "6.1.0", features = ["rayon"], optional = true }
 dilate        = "0.6.3"
 dssim-core    = { version = "3.4.0", optional = true }
@@ -34,6 +40,7 @@ rgb           = { version = "0.8.52", optional = true }
 rustfft       = { version = "6.4.1", optional = true }
 rustyml       = { version = "0.11.0", features = ["utility"], optional = true }
 sobol_burley  = "0.5.0"
+strum         = { version = "0.28.0", features = ["derive"], optional = true }
 termbg        = { version = "0.6.2", optional = true }
 
 [dev-dependencies]
@@ -61,6 +68,15 @@ all-algorithms       = [
   "wu"
 ]
 bit-merge            = ["k-means"]
+cli                  = [
+  "all-algorithms",
+  "partial-transparency",
+  "dep:anyhow",
+  "dep:clap",
+  "dep:strum",
+  "image/jpeg",
+  "image/png"
+]
 dump-a-saliency      = []
 dump-b-saliency      = []
 # For debugging -- prints the mean & threshold Delta E of the quantized image vs the original image.
