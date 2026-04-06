@@ -1,17 +1,11 @@
-//! Competitive learning network for palette generation.
+//! Spectral-residual peak isolation for palette generation.
 //!
-//! Trains a 1D Kohonen self-organizing map (SOM) on the **spectral color
-//! transform** of the image rather than raw pixel data. Each frequency bin
-//! (u, v) in the 2D FFT has an amplitude per Lab channel — the triplet
-//! (|L̂|, |â|, |b̂|) is treated as a "spectral color" describing what color
-//! content exists at that frequency. Training the network on these spectral
-//! colors gives it a view of the color space that naturally separates
-//! highlight/detail colors from bulk colors, similar to how bit-bucketing
-//! partitions color space but driven by frequency structure.
-//!
-//! The resulting palette can be used on its own or combined with a
-//! pixel-trained palette so large uniform regions still get adequate
-//! representation.
+//! Computes the spectral residual of the image in Lab color space, producing a
+//! per-pixel saliency map. Peaks above a threshold (mean + 1.36 standard
+//! deviation) are collected, then a greedy farthest-point algorithm selects
+//! the most isolated peaks in Lab space, breaking ties by saliency. This
+//! gives small palettes excellent coverage of visually distinct, salient
+//! colors.
 
 use image::Rgba;
 use image::RgbaImage;
@@ -29,11 +23,6 @@ use rustfft::num_traits::Zero;
 use crate::PaletteBuilder;
 use crate::private;
 use crate::rgba_to_lab;
-
-const TRAINING_PASSES: usize = 8;
-const ALPHA_START: f32 = 0.8;
-const ALPHA_END: f32 = 0.01;
-const RADIUS_FRACTION: f32 = 0.25;
 
 pub struct FocalPaletteBuilder;
 
@@ -59,7 +48,7 @@ impl PaletteBuilder for FocalPaletteBuilder {
 
         let spectral_colors = spectral_color_transform(&pixels, width, height);
 
-        train(&spectral_colors, &pixels, palette_size)
+        isolate_peaks(&spectral_colors, &pixels, palette_size)
     }
 }
 
@@ -68,36 +57,6 @@ struct SpectralPixel {
     l: f32,
     a: f32,
     b: f32,
-}
-
-impl std::ops::Div<f32> for SpectralPixel {
-    type Output = Self;
-
-    fn div(
-        self,
-        d: f32,
-    ) -> Self {
-        Self {
-            l: self.l / d,
-            a: self.a / d,
-            b: self.b / d,
-        }
-    }
-}
-
-impl std::ops::Add for SpectralPixel {
-    type Output = Self;
-
-    fn add(
-        self,
-        rhs: Self,
-    ) -> Self {
-        Self {
-            l: self.l + rhs.l,
-            a: self.a + rhs.a,
-            b: self.b + rhs.b,
-        }
-    }
 }
 
 pub(crate) fn fft_2d(
@@ -136,8 +95,6 @@ pub(crate) fn fft_2d(
             }
         });
 }
-
-
 
 fn spectral_color_transform(
     pixels: &[Lab],
@@ -223,13 +180,12 @@ fn amplify(
 ) -> Vec<f32> {
     let n = wp2 * hp2;
 
-    // log-amplitude and phase
-    let mut amp_amp = vec![0.0f32; n];
+    let mut log_amp = vec![0.0f32; n];
     let mut phase = vec![0.0f32; n];
     fft_buf
         .par_iter()
         .copied()
-        .zip(&mut amp_amp)
+        .zip(&mut log_amp)
         .for_each(|(c, dest)| *dest = c.norm().max(f32::EPSILON).ln());
     fft_buf
         .par_iter()
@@ -237,18 +193,18 @@ fn amplify(
         .zip(&mut phase)
         .for_each(|(c, dest)| *dest = c.arg());
 
-    let amp_mean = amp_amp.par_iter().copied().sum::<f32>() / n as f32;
+    let amp_mean = log_amp.par_iter().copied().sum::<f32>() / n as f32;
 
     let mut buffer = vec![Complex::zero(); n];
-    amp_amp
+    log_amp
         .into_par_iter()
         .zip(phase.into_par_iter())
         .zip(&mut buffer)
         .for_each(|((a, p), dest)| {
             let diff = a - amp_mean;
             *dest = Complex {
-                re: diff.powi(3) * p.cos(),
-                im: diff.powi(3) * p.sin(),
+                re: diff * p.cos(),
+                im: diff * p.sin(),
             };
         });
 
@@ -274,173 +230,95 @@ fn amplify(
     out
 }
 
-fn spectral_to_lab_via_nearest(
-    neurons: &[SpectralPixel],
-    spectral_pixels: &[SpectralPixel],
-    lab_pixels: &[Lab],
-) -> Vec<Lab> {
-    neurons
-        .iter()
-        .map(|neuron| {
-            let best = spectral_pixels
-                .iter()
-                .enumerate()
-                .map(|(i, sp)| {
-                    let dl = neuron.l - sp.l;
-                    let da = neuron.a - sp.a;
-                    let db = neuron.b - sp.b;
-                    (i, dl * dl + da * da + db * db)
-                })
-                .min_by(|(_, a), (_, b)| a.total_cmp(b))
-                .map(|(i, _)| i)
-                .unwrap_or(0);
-            lab_pixels[best]
-        })
-        .collect()
-}
-
-fn maximin_init(
-    pixels: &[SpectralPixel],
-    n: usize,
-) -> Vec<[f32; 3]> {
-    let mut neurons = Vec::with_capacity(n);
-
-    let centroid = pixels.par_iter().copied().reduce(
-        || SpectralPixel {
-            l: 0.0,
-            a: 0.0,
-            b: 0.0,
-        },
-        |a, b| a + b,
-    ) / pixels.len() as f32;
-
-    let first = pixels
-        .par_iter()
-        .enumerate()
-        .map(|(i, px)| {
-            let dl = px.l - centroid.l;
-            let da = px.a - centroid.a;
-            let db = px.b - centroid.b;
-            (i, dl * dl + da * da + db * db)
-        })
-        .max_by(|(_, a), (_, b)| a.total_cmp(b))
-        .map(|(i, _)| i)
-        .unwrap_or(0);
-    let p = pixels[first];
-    neurons.push([p.l, p.a, p.b]);
-
-    for _ in 1..n {
-        let best = pixels
-            .par_iter()
-            .enumerate()
-            .map(|(idx, px)| {
-                let min_d = neurons
-                    .iter()
-                    .map(|n| {
-                        let dl = px.l - n[0];
-                        let da = px.a - n[1];
-                        let db = px.b - n[2];
-                        dl * dl + da * da + db * db
-                    })
-                    .fold(f32::MAX, f32::min);
-                (idx, min_d)
-            })
-            .max_by(|(_, a), (_, b)| a.total_cmp(b))
-            .map(|(i, _)| i)
-            .unwrap_or(0);
-
-        let p = pixels[best];
-        neurons.push([p.l, p.a, p.b]);
-    }
-
-    neurons
-}
-
-fn train(
+fn isolate_peaks(
     spectral_pixels: &[SpectralPixel],
     lab_pixels: &[Lab],
     palette_size: usize,
 ) -> Vec<Lab> {
-    let pixels = spectral_pixels;
-
-    if pixels.is_empty() {
+    if spectral_pixels.is_empty() {
         return vec![Lab::new(50.0, 0.0, 0.0)];
     }
 
-    let n = palette_size;
-    let mut neurons = maximin_init(pixels, n);
-
-    let total_samples = pixels.len() * TRAINING_PASSES;
-    let radius_start = (n as f32 * RADIUS_FRACTION).max(1.0);
-    let radius_end = 0.5f32;
-
-    let golden_ratio = 0.6180339887_f64;
-    let len = pixels.len();
-    let mut probe = 0.0_f64;
-
-    for step in 0..total_samples {
-        let t = step as f32 / total_samples as f32;
-
-        let alpha = ALPHA_START * (ALPHA_END / ALPHA_START).powf(t);
-        let radius = radius_start * (radius_end / radius_start).powf(t);
-        let radius_sq = radius * radius;
-
-        probe += golden_ratio;
-        if probe >= 1.0 {
-            probe -= 1.0;
-        }
-        let px_idx = (probe * len as f64) as usize;
-        let input = pixels[px_idx];
-
-        let bmu = find_bmu(&neurons, &input);
-
-        let lo = if bmu as f32 - radius < 0.0 {
-            0
-        } else {
-            (bmu as f32 - radius) as usize
-        };
-        let hi = ((bmu as f32 + radius) as usize + 1).min(n);
-
-        for j in lo..hi {
-            let dist = (j as f32 - bmu as f32) * (j as f32 - bmu as f32);
-            let h = (-dist / (2.0 * radius_sq)).exp();
-            let lr = alpha * h;
-
-            neurons[j][0] += lr * (input.l - neurons[j][0]);
-            neurons[j][1] += lr * (input.a - neurons[j][1]);
-            neurons[j][2] += lr * (input.b - neurons[j][2]);
-        }
-    }
-
-    let neuron_spectral: Vec<SpectralPixel> = neurons
-        .iter()
-        .map(|n| SpectralPixel {
-            l: n[0],
-            a: n[1],
-            b: n[2],
-        })
+    let saliency: Vec<f32> = spectral_pixels
+        .par_iter()
+        .map(|sp| (sp.l * sp.l + sp.a * sp.a + sp.b * sp.b).sqrt())
         .collect();
 
-    spectral_to_lab_via_nearest(&neuron_spectral, pixels, lab_pixels)
+    let n = saliency.len() as f32;
+    let mean = saliency.par_iter().copied().sum::<f32>() / n;
+    let variance = saliency
+        .par_iter()
+        .map(|&s| (s - mean) * (s - mean))
+        .sum::<f32>()
+        / n;
+    let threshold = mean + variance.sqrt() * 1.36;
+
+    let mut peaks: Vec<(usize, f32)> = saliency
+        .iter()
+        .enumerate()
+        .filter(|&(_, &s)| s > threshold)
+        .map(|(i, &s)| (i, s))
+        .collect();
+
+    if peaks.len() < palette_size {
+        let mut indexed: Vec<(usize, f32)> = saliency.iter().copied().enumerate().collect();
+        indexed.sort_unstable_by(|(_, a), (_, b)| b.total_cmp(a));
+        indexed.truncate(palette_size);
+        peaks = indexed;
+    }
+
+    peaks.sort_unstable_by(|(_, a), (_, b)| b.total_cmp(a));
+
+    farthest_point_selection(&peaks, lab_pixels, palette_size)
 }
 
-fn find_bmu(
-    neurons: &[[f32; 3]],
-    input: &SpectralPixel,
-) -> usize {
-    let mut best = 0;
-    let mut best_dist = f32::MAX;
-    for (i, n) in neurons.iter().enumerate() {
-        let dl = input.l - n[0];
-        let da = input.a - n[1];
-        let db = input.b - n[2];
-        let d = dl * dl + da * da + db * db;
-        if d < best_dist {
-            best_dist = d;
-            best = i;
+fn farthest_point_selection(
+    peaks: &[(usize, f32)],
+    lab_pixels: &[Lab],
+    n: usize,
+) -> Vec<Lab> {
+    let mut selected: Vec<Lab> = Vec::with_capacity(n);
+    let mut chosen = vec![false; peaks.len()];
+
+    selected.push(lab_pixels[peaks[0].0]);
+    chosen[0] = true;
+
+    let mut min_dist: Vec<f32> = vec![f32::MAX; peaks.len()];
+
+    for _ in 1..n.min(peaks.len()) {
+        let last = selected.last().unwrap();
+
+        for (j, (idx, _)) in peaks.iter().enumerate() {
+            let lab = lab_pixels[*idx];
+            let dl = lab.l - last.l;
+            let da = lab.a - last.a;
+            let db = lab.b - last.b;
+            let d = dl * dl + da * da + db * db;
+            if d < min_dist[j] {
+                min_dist[j] = d;
+            }
+        }
+
+        let best = peaks
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| !chosen[*j])
+            .max_by(|(i, (_, sal_a)), (j, (_, sal_b))| {
+                min_dist[*i]
+                    .total_cmp(&min_dist[*j])
+                    .then(sal_a.total_cmp(sal_b))
+            });
+
+        match best {
+            Some((j, (idx, _))) => {
+                selected.push(lab_pixels[*idx]);
+                chosen[j] = true;
+            }
+            None => break,
         }
     }
-    best
+
+    selected
 }
 
 #[cfg(test)]
