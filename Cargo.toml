@@ -70,12 +70,12 @@ all-algorithms       = [
 bit-merge            = ["k-means"]
 cli                  = [
   "all-algorithms",
-  "partial-transparency",
   "dep:anyhow",
   "dep:clap",
   "dep:strum",
   "image/jpeg",
-  "image/png"
+  "image/png",
+  "partial-transparency"
 ]
 dump-a-saliency      = []
 dump-b-saliency      = []
@@ -100,12 +100,7 @@ dump-saliency        = [
   "dump-weights"
 ]
 dump-weights         = []
-focal                = [
-  "dep:atomic_float",
-  "dep:libblur",
-  "dep:rustfft",
-  "k-means"
-]
+focal                = ["dep:rustfft"]
 k-means              = ["dep:atomic_float"]
 k-medians            = ["dep:atomic_float", "dep:dashmap"]
 median-cut           = []

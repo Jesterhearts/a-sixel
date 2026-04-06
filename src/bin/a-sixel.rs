@@ -1,27 +1,16 @@
 use std::fs::read;
 
-#[cfg(feature = "adu")]
 use a_sixel::ADUSixelEncoder;
-#[cfg(feature = "bit-merge")]
 use a_sixel::BitMergeSixelEncoder;
-#[cfg(feature = "bit-merge")]
 use a_sixel::BitMergeSixelEncoderBest;
-#[cfg(feature = "bit-merge")]
 use a_sixel::BitMergeSixelEncoderBetter;
-#[cfg(feature = "bit-merge")]
 use a_sixel::BitMergeSixelEncoderLow;
 use a_sixel::BitSixelEncoder;
-#[cfg(feature = "focal")]
 use a_sixel::FocalSixelEncoder;
-#[cfg(feature = "k-means")]
 use a_sixel::KMeansSixelEncoder;
-#[cfg(feature = "k-medians")]
 use a_sixel::KMediansSixelEncoder;
-#[cfg(feature = "median-cut")]
 use a_sixel::MedianCutSixelEncoder;
-#[cfg(feature = "octree")]
 use a_sixel::OctreeSixelEncoder;
-#[cfg(feature = "wu")]
 use a_sixel::WuSixelEncoder;
 use a_sixel::dither::Bayer;
 use a_sixel::dither::NoDither;
@@ -33,23 +22,15 @@ use strum::EnumString;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, Display)]
 #[strum(ascii_case_insensitive, serialize_all = "kebab-case")]
 enum Algorithm {
-    #[cfg(feature = "adu")]
     Adu,
     Bit,
-    #[cfg(feature = "bit-merge")]
     BitMergeLow,
-    #[cfg(feature = "bit-merge")]
     BitMerge,
-    #[cfg(feature = "bit-merge")]
     BitMergeBetter,
-    #[cfg(feature = "bit-merge")]
     BitMergeBest,
-    #[cfg(feature = "focal")]
     Focal,
-    #[cfg(feature = "k-means")]
     #[strum(serialize = "kmeans", serialize = "k-means")]
     KMeans,
-    #[cfg(feature = "k-medians")]
     #[strum(
         serialize = "kmedians",
         serialize = "kmed",
@@ -57,11 +38,8 @@ enum Algorithm {
         serialize = "k-med"
     )]
     KMedians,
-    #[cfg(feature = "median-cut")]
     MedianCut,
-    #[cfg(feature = "octree")]
     Octree,
-    #[cfg(feature = "wu")]
     Wu,
 }
 
@@ -104,7 +82,6 @@ fn main() -> anyhow::Result<()> {
     let image = image.to_rgba8();
 
     let six = match args.algorithm {
-        #[cfg(feature = "adu")]
         Algorithm::Adu => match args.dither {
             Dither::No => {
                 <ADUSixelEncoder<NoDither>>::encode_with_palette_size(image, args.palette_size)
@@ -129,7 +106,6 @@ fn main() -> anyhow::Result<()> {
                 <BitSixelEncoder<Bayer>>::encode_with_palette_size(image, args.palette_size)
             }
         },
-        #[cfg(feature = "bit-merge")]
         Algorithm::BitMergeLow => match args.dither {
             Dither::No => <BitMergeSixelEncoderLow<NoDither>>::encode_with_palette_size(
                 image,
@@ -145,7 +121,6 @@ fn main() -> anyhow::Result<()> {
                 <BitMergeSixelEncoderLow<Bayer>>::encode_with_palette_size(image, args.palette_size)
             }
         },
-        #[cfg(feature = "bit-merge")]
         Algorithm::BitMerge => match args.dither {
             Dither::No => {
                 <BitMergeSixelEncoder<NoDither>>::encode_with_palette_size(image, args.palette_size)
@@ -160,7 +135,6 @@ fn main() -> anyhow::Result<()> {
                 <BitMergeSixelEncoder<Bayer>>::encode_with_palette_size(image, args.palette_size)
             }
         },
-        #[cfg(feature = "bit-merge")]
         Algorithm::BitMergeBetter => match args.dither {
             Dither::No => <BitMergeSixelEncoderBetter<NoDither>>::encode_with_palette_size(
                 image,
@@ -178,7 +152,6 @@ fn main() -> anyhow::Result<()> {
                 args.palette_size,
             ),
         },
-        #[cfg(feature = "bit-merge")]
         Algorithm::BitMergeBest => match args.dither {
             Dither::No => <BitMergeSixelEncoderBest<NoDither>>::encode_with_palette_size(
                 image,
@@ -196,7 +169,6 @@ fn main() -> anyhow::Result<()> {
                 args.palette_size,
             ),
         },
-        #[cfg(feature = "focal")]
         Algorithm::Focal => match args.dither {
             Dither::No => {
                 <FocalSixelEncoder<NoDither>>::encode_with_palette_size(image, args.palette_size)
@@ -211,7 +183,6 @@ fn main() -> anyhow::Result<()> {
                 <FocalSixelEncoder<Bayer>>::encode_with_palette_size(image, args.palette_size)
             }
         },
-        #[cfg(feature = "k-means")]
         Algorithm::KMeans => match args.dither {
             Dither::No => {
                 <KMeansSixelEncoder<NoDither>>::encode_with_palette_size(image, args.palette_size)
@@ -226,7 +197,6 @@ fn main() -> anyhow::Result<()> {
                 <KMeansSixelEncoder<Bayer>>::encode_with_palette_size(image, args.palette_size)
             }
         },
-        #[cfg(feature = "k-medians")]
         Algorithm::KMedians => match args.dither {
             Dither::No => {
                 <KMediansSixelEncoder<NoDither>>::encode_with_palette_size(image, args.palette_size)
@@ -241,7 +211,6 @@ fn main() -> anyhow::Result<()> {
                 <KMediansSixelEncoder<Bayer>>::encode_with_palette_size(image, args.palette_size)
             }
         },
-        #[cfg(feature = "median-cut")]
         Algorithm::MedianCut => match args.dither {
             Dither::No => <MedianCutSixelEncoder<NoDither>>::encode_with_palette_size(
                 image,
@@ -257,7 +226,6 @@ fn main() -> anyhow::Result<()> {
                 <MedianCutSixelEncoder<Bayer>>::encode_with_palette_size(image, args.palette_size)
             }
         },
-        #[cfg(feature = "octree")]
         Algorithm::Octree => match args.dither {
             Dither::No => {
                 <OctreeSixelEncoder<NoDither>>::encode_with_palette_size(image, args.palette_size)
@@ -272,7 +240,6 @@ fn main() -> anyhow::Result<()> {
                 <OctreeSixelEncoder<Bayer>>::encode_with_palette_size(image, args.palette_size)
             }
         },
-        #[cfg(feature = "wu")]
         Algorithm::Wu => match args.dither {
             Dither::No => {
                 <WuSixelEncoder<NoDither>>::encode_with_palette_size(image, args.palette_size)

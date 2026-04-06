@@ -6,7 +6,20 @@ dither=""
 algorithm=""
 show=0
 
-valid_algorithms=(adu bit bit-merge-low bit-merge bit-merge-better bit-merge-best focal k-means k-medians median-cut octree wu)
+valid_algorithms=(
+    adu
+    bit
+    bit-merge-low
+    bit-merge
+    bit-merge-better
+    bit-merge-best
+    focal
+    k-means
+    k-medians
+    median-cut
+    octree
+    wu
+)
 
 usage() {
     echo "Usage: $0 [-p palette_size] [-d no|sierra|sobol|bayer] [-a algorithm[,algorithm,...]] [-s]"

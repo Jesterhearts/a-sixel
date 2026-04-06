@@ -71,7 +71,7 @@ impl<const STAGE_1_PALETTE_SIZE: usize, const STAGE_2_PALETTE_SIZE: usize> Palet
         pool.install(|| {
             image.par_pixels().for_each(|pixel| {
                 PALETTE.with_borrow_mut(|palette| {
-                    palette.resize(palette_size, (0, 0, 0, 0));
+                    palette.resize(STAGE_1_PALETTE_SIZE, (0, 0, 0, 0));
 
                     let pixel = Srgb::<u8>::new(pixel[0], pixel[1], pixel[2]);
                     let index = BitPaletteBuilder::index(pixel, bit.shift);
@@ -85,7 +85,7 @@ impl<const STAGE_1_PALETTE_SIZE: usize, const STAGE_2_PALETTE_SIZE: usize> Palet
 
         let per_thread_palettes = pool.broadcast(|_ctx| PALETTE.with_borrow_mut(std::mem::take));
 
-        let mut final_palette = vec![(0, 0, 0, 0); palette_size];
+        let mut final_palette = vec![(0, 0, 0, 0); STAGE_1_PALETTE_SIZE];
         for palette in per_thread_palettes {
             for (dest, src) in final_palette.iter_mut().zip(palette) {
                 dest.0 += src.0;
