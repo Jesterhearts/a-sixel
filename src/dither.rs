@@ -14,6 +14,7 @@ use palette::Lab;
 use palette::color_difference::EuclideanDistance;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
+use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use rayon::slice::ParallelSliceMut;
 use sobol_burley::sample;
@@ -345,7 +346,9 @@ impl Dither for Bayer {
         in_palette: &[Lab],
         bucketer: &impl PaletteBucketer,
     ) -> Vec<usize> {
-        let matrix_size = image.width().max(image.height()).ilog2().max(2) as usize;
+        let order = image.width().min(image.height()).ilog2().max(2) as usize;
+        let matrix_size = 1 << order;
+        let total_bits = 2 * order;
         let mut matrix = vec![0.0; matrix_size * matrix_size];
 
         (0..matrix_size as u32)
@@ -356,10 +359,24 @@ impl Dither for Bayer {
                     let x = x as u32;
                     let bits = (x ^ y).dilate_expand::<2>().value()
                         | (y.dilate_expand::<2>().value() << 1);
-                    let bits = bits.reverse_bits() >> bits.leading_zeros();
+                    let bits = bits.reverse_bits() >> (u32::BITS - total_bits as u32);
                     *cell = bits as f32 / matrix_size.pow(2) as f32;
                 }
             });
+
+        let max_matrix = matrix
+            .iter()
+            .copied()
+            .max_by(|l, r| l.total_cmp(r))
+            .unwrap_or(1.0);
+        let min_matrix = matrix
+            .iter()
+            .copied()
+            .min_by(|l, r| l.total_cmp(r))
+            .unwrap_or(0.0);
+        matrix.par_iter_mut().for_each(|cell| {
+            *cell = (*cell - min_matrix) / (max_matrix - min_matrix);
+        });
 
         let mut result = vec![0; image.width() as usize * image.height() as usize];
         image
