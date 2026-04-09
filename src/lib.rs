@@ -450,10 +450,12 @@ impl SixelEncoder {
         // Each sixel row takes max 6 bytes for pallete entry [# | 256 | $ | -].
         // There are ceil h/6 rows.
         // There are width bytes of sixel characters per row.
-        let string_chunk_width = (image.width() as usize + 6) * palette_size;
-        let mut sixel_string = Box::new_zeroed_slice(
-            1024 + string_chunk_width * (image.height() as usize).div_ceil(6),
-        );
+        let string_chunk_size = (image.width() as usize + 6) * palette_size;
+        let strings_len = string_chunk_size * (image.height() as usize).div_ceil(6);
+        // Header: intro (~21 bytes) + palette defs (up to 18 bytes each) + footer (1
+        // byte).
+        let header_size = 128 + 18 * palette_size;
+        let mut sixel_string = Box::new_zeroed_slice(header_size + strings_len);
         let mut str_idx = 0;
 
         for byte in br#"P9;1q"1;1;"# {
@@ -656,14 +658,13 @@ impl SixelEncoder {
 
             let width = image.width() as usize;
 
-            let lens: Vec<_> = paletted_pixels
+            paletted_pixels
                 .par_chunks(width * 6)
                 .zip(image.into_raw().par_chunks(width * 6 * 4))
-                .zip(sixel_string[str_idx..].par_chunks_mut(string_chunk_width))
-                .map(|((palette_chunk, rgba_chunk), sixel_string)| {
+                .zip(sixel_string[str_idx..].par_chunks_mut(string_chunk_size))
+                .for_each(|((palette_chunk, rgba_chunk), sixel_string)| {
                     let mut str_idx = 0;
                     let mut color_bits = vec![0u8; palette_size * width];
-                    let mut color_used = vec![false; palette_size];
                     let chunk_height = palette_chunk.len() / width;
 
                     for row in 0..chunk_height {
@@ -674,7 +675,6 @@ impl SixelEncoder {
                             if rgba_chunk[pixel_idx * 4 + 3] != 0 {
                                 let color = palette_chunk[pixel_idx];
                                 color_bits[color * width + col] |= bit;
-                                color_used[color] = true;
                             }
                         }
                     }
@@ -683,7 +683,7 @@ impl SixelEncoder {
                         *d += 0x3f;
                     });
 
-                    for (color, _) in color_used.iter().enumerate().filter(|(_, u)| **u) {
+                    for color in 0..palette_size {
                         sixel_string[str_idx].write(b'#');
                         str_idx += 1;
                         push_usize(sixel_string, &mut str_idx, color);
@@ -697,18 +697,9 @@ impl SixelEncoder {
                     }
 
                     sixel_string[str_idx].write(b'-');
-                    str_idx += 1;
-                    str_idx
-                })
-                .collect();
+                });
 
-            let mut src = str_idx + string_chunk_width;
-            str_idx += lens[0];
-            for len in &lens[1..] {
-                sixel_string.copy_within(src..src + *len, str_idx);
-                src += string_chunk_width;
-                str_idx += *len;
-            }
+            str_idx += strings_len;
         }
 
         for byte in br#"\"# {
