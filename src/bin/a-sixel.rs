@@ -1,4 +1,7 @@
 use std::fs::read;
+use std::io::IsTerminal;
+use std::io::Read;
+use std::io::stdin;
 
 use a_sixel::ADUSixelEncoder;
 use a_sixel::BitMergeSixelEncoder;
@@ -15,6 +18,7 @@ use a_sixel::WuSixelEncoder;
 use a_sixel::dither::Bayer;
 use a_sixel::dither::NoDither;
 use a_sixel::dither::Sobol;
+use clap::CommandFactory;
 use clap::Parser;
 use strum::Display;
 use strum::EnumString;
@@ -83,11 +87,20 @@ struct Args {
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let Some(image_path) = args.specified_image_path.or(args.positional_image_path) else {
-        anyhow::bail!("An image path must be specified")
-    };
 
-    let image = image::load_from_memory(&read(image_path)?)?;
+    let image_data;
+    if !stdin().is_terminal() {
+        let mut buf = vec![];
+        stdin().read_to_end(&mut buf)?;
+        image_data = buf;
+    } else if let Some(image_path) = args.specified_image_path.or(args.positional_image_path) {
+        image_data = read(image_path)?;
+    } else {
+        Args::command().print_help()?;
+        return Ok(());
+    }
+
+    let image = image::load_from_memory(&image_data)?;
     let image = image.to_rgba8();
 
     let six = match args.algorithm {
