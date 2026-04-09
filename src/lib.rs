@@ -318,7 +318,9 @@ impl PaletteBuilder {
 ///   concern.
 #[derive(Debug, Clone, Copy)]
 pub struct SixelEncoder {
+    /// The color quantization algorithm used to reduce the image to a palette.
     pub algorithm: PaletteBuilder,
+    /// The dithering algorithm applied after quantization.
     pub dither: dither::Dither,
 }
 
@@ -332,6 +334,8 @@ impl Default for SixelEncoder {
 }
 
 impl SixelEncoder {
+    /// Create a new encoder with the given palette-building algorithm and
+    /// dithering mode.
     pub fn new(
         algorithm: PaletteBuilder,
         dither: dither::Dither,

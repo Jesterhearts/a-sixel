@@ -22,10 +22,18 @@ use rustfft::num_traits::Zero;
 
 use crate::rgba_to_lab;
 
-pub(crate) struct FocalPaletteBuilder;
+/// Builds a palette using spectral-residual peak isolation.
+///
+/// Identifies visually salient colors by computing a spectral residual
+/// saliency map, then selects the most isolated salient peaks using a
+/// farthest-point strategy. This tends to preserve highlights and
+/// distinctive color details that other quantizers might merge away.
+pub struct FocalPaletteBuilder;
 
 impl FocalPaletteBuilder {
-    pub(crate) fn build_palette(
+    /// Quantize the image into `palette_size` colors using spectral-residual
+    /// peak isolation and return the resulting palette in Lab color space.
+    pub fn build_palette(
         image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {

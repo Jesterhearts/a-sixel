@@ -11,7 +11,12 @@ use palette::Lab;
 use palette::Srgb;
 use rayon::iter::ParallelIterator;
 
-pub(crate) struct BitPaletteBuilder {
+/// Builds a palette by bucketing pixel colors via bit-dilation into a
+/// power-of-two number of buckets and averaging the colors in each bucket.
+///
+/// This is the fastest palette builder and produces acceptable results at
+/// larger palette sizes (e.g. 256).
+pub struct BitPaletteBuilder {
     pub(crate) shift: usize,
 }
 
@@ -42,7 +47,9 @@ impl BitPaletteBuilder {
         (rgb >> shift) as usize
     }
 
-    pub(crate) fn build_palette(
+    /// Quantize the image into `palette_size` colors using bit-dilation
+    /// bucketing and return the resulting palette in Lab color space.
+    pub fn build_palette(
         image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {

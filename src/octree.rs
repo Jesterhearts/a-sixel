@@ -1,7 +1,7 @@
 //! Uses an octree to build a palette from an image.
 //!
 //! This is fast (although not as fast as the
-//! [`BitPaletteBuilder`](crate::BitPaletteBuilder)) and produces decent
+//! [`BitPaletteBuilder`](crate::bit::BitPaletteBuilder)) and produces decent
 //! results. By default the currently implemented algorithm uses a max-heap for
 //! merging nodes by pixel count, leading to the palette being built from the
 //! most dominant colors in the image first, with less dominate colors being
@@ -62,7 +62,17 @@ impl<const MIN: bool> Ord for Candidate<MIN> {
 }
 
 #[derive(Debug)]
-pub(crate) struct OctreePaletteBuilder<const USE_MIN_HEAP: bool = false> {
+/// Builds a palette using an octree color quantizer.
+///
+/// Inserts every pixel into an 8-ary tree (3 bits per level, one per color
+/// channel) and then iteratively merges leaf nodes until the desired palette
+/// size is reached.
+///
+/// Set `USE_MIN_HEAP` to `true` to merge the *least* populated leaves first
+/// (traditional octree behavior). The default (`false`) uses a max-heap,
+/// which builds the palette from the most dominant colors first and tends to
+/// produce more visually appealing results on the test set.
+pub struct OctreePaletteBuilder<const USE_MIN_HEAP: bool = false> {
     nodes: Vec<Node>,
 }
 
@@ -121,7 +131,9 @@ impl<const USE_MIN_HEAP: bool> OctreePaletteBuilder<USE_MIN_HEAP> {
 }
 
 impl<const USE_MIN_HEAP: bool> OctreePaletteBuilder<USE_MIN_HEAP> {
-    pub(crate) fn build_palette(
+    /// Quantize the image into `palette_size` colors using octree
+    /// quantization and return the resulting palette in Lab color space.
+    pub fn build_palette(
         image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<palette::Lab> {

@@ -147,10 +147,17 @@ impl Ord for Hist {
     }
 }
 
-pub(crate) struct WuPaletteBuilder;
+/// Builds a palette using Wu's PCA-based quantization.
+///
+/// Recursively bisects the color population along its principal component
+/// (axis of greatest variance) until the desired number of palette entries
+/// is reached.
+pub struct WuPaletteBuilder;
 
 impl WuPaletteBuilder {
-    pub(crate) fn build_palette(
+    /// Quantize the image into `palette_size` colors using PCA-based
+    /// bisection and return the resulting palette in Lab color space.
+    pub fn build_palette(
         image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {

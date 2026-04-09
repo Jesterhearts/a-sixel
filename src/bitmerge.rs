@@ -36,7 +36,19 @@ use rayon::iter::ParallelIterator;
 use crate::bit::BitPaletteBuilder;
 use crate::kmeans::parallel_kmeans;
 
-pub(crate) struct BitMergePaletteBuilder<
+/// Builds a palette by combining bit-dilation bucketing, k-means refinement,
+/// and variance-minimizing agglomerative merging.
+///
+/// The const generic parameters control the two-stage pipeline:
+/// - `STAGE_1_PALETTE_SIZE` is the number of bit-buckets fed into k-means
+///   (scales roughly linearly with time).
+/// - `STAGE_2_PALETTE_SIZE` is the k-means output size that feeds into the
+///   agglomerative merge step (scales **quadratically** with time).
+///
+/// The default parameters target quality similar to
+/// [`KMeansPaletteBuilder`](crate::kmeans::KMeansPaletteBuilder) at roughly 5x
+/// the speed.
+pub struct BitMergePaletteBuilder<
     const STAGE_1_PALETTE_SIZE: usize = { 1 << 18 },
     const STAGE_2_PALETTE_SIZE: usize = 512,
 >;
@@ -44,7 +56,9 @@ pub(crate) struct BitMergePaletteBuilder<
 impl<const STAGE_1_PALETTE_SIZE: usize, const STAGE_2_PALETTE_SIZE: usize>
     BitMergePaletteBuilder<STAGE_1_PALETTE_SIZE, STAGE_2_PALETTE_SIZE>
 {
-    pub(crate) fn build_palette(
+    /// Quantize the image into `palette_size` colors using the bit-merge
+    /// pipeline and return the resulting palette in Lab color space.
+    pub fn build_palette(
         image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<palette::Lab> {

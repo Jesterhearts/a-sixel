@@ -1,7 +1,7 @@
 //! Use Adaptive Distributive Units to "learn" the image's color properties and
 //! select palette entries.
 //!
-//! See <httpe://faculty.uca.edu/ecelebi/documents/ISJ_2014.pdf> for the
+//! See <https://faculty.uca.edu/ecelebi/documents/ISJ_2014.pdf> for the
 //! original paper on this algorithm.
 //!
 //! The parameters from the paper for a 256 color palette are:
@@ -22,10 +22,17 @@ use sobol_burley::sample_4d;
 
 use crate::rgba_to_lab;
 
-pub(crate) struct ADUPaletteBuilder;
+/// Builds a palette using the Adaptive Distributive Units algorithm.
+///
+/// ADU "learns" the image's color distribution by competitively updating a set
+/// of representative units, producing palettes that adapt to the input's
+/// statistical properties.
+pub struct ADUPaletteBuilder;
 
 impl ADUPaletteBuilder {
-    pub(crate) fn build_palette(
+    /// Quantize the image into `palette_size` colors using ADU and return
+    /// the resulting palette in Lab color space.
+    pub fn build_palette(
         image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {

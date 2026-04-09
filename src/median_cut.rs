@@ -21,10 +21,16 @@ use rayon::slice::ParallelSliceMut;
 
 use crate::rgba_to_lab;
 
-pub(crate) struct MedianCutPaletteBuilder;
+/// Builds a palette using the median cut algorithm.
+///
+/// Recursively splits the pixel population along the Lab axis with the
+/// largest range, then averages each bucket to produce palette entries.
+pub struct MedianCutPaletteBuilder;
 
 impl MedianCutPaletteBuilder {
-    pub(crate) fn build_palette(
+    /// Quantize the image into `palette_size` colors using median cut and
+    /// return the resulting palette in Lab color space.
+    pub fn build_palette(
         image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {

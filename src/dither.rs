@@ -78,6 +78,7 @@ impl PaletteBucketer {
 pub struct KdTreeBucketer(KdTree<f32, usize, 3, 257, u32>);
 
 impl KdTreeBucketer {
+    /// Build a KD-tree from the given palette for nearest-neighbor lookups.
     pub fn new(palette: &[Lab]) -> Self {
         let mut tree = KdTree::with_capacity(palette.len());
         for (idx, color) in palette.iter().enumerate() {

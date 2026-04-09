@@ -18,10 +18,12 @@ use crate::bit::BitPaletteBuilder;
 use crate::rgba_to_lab;
 
 /// Performs K-Means clustering on the image's pixels to build a palette.
-pub(crate) struct KMeansPaletteBuilder;
+pub struct KMeansPaletteBuilder;
 
 impl KMeansPaletteBuilder {
-    pub(crate) fn build_palette(
+    /// Quantize the image into `palette_size` colors using k-means clustering
+    /// and return the resulting palette in Lab color space.
+    pub fn build_palette(
         image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {

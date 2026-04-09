@@ -21,10 +21,16 @@ use rayon::slice::ParallelSliceMut;
 use crate::bit::BitPaletteBuilder;
 use crate::rgba_to_lab;
 
-pub(crate) struct KMediansPaletteBuilder;
+/// Builds a palette using k-medians clustering in Lab color space.
+///
+/// Similar to k-means but uses the component-wise median instead of the mean
+/// as the cluster representative, making it more robust to outlier colors.
+pub struct KMediansPaletteBuilder;
 
 impl KMediansPaletteBuilder {
-    pub(crate) fn build_palette(
+    /// Quantize the image into `palette_size` colors using k-medians
+    /// clustering and return the resulting palette in Lab color space.
+    pub fn build_palette(
         image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {
