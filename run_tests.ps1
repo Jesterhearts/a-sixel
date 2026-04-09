@@ -3,7 +3,7 @@ param(
     [int]$PaletteSize = $null,
 
     [Parameter(Mandatory = $false)]
-    [ValidateSet("no", "sierra", "sobol", "bayer")]
+    [ValidateSet("none", "sierra", "sobol", "bayer")]
     [string]$Dither = $null,
 
 

@@ -22,9 +22,9 @@ valid_algorithms=(
 )
 
 usage() {
-    echo "Usage: $0 [-p palette_size] [-d no|sierra|sobol|bayer] [-a algorithm[,algorithm,...]] [-s]"
+    echo "Usage: $0 [-p palette_size] [-d none|sierra|sobol|bayer] [-a algorithm[,algorithm,...]] [-s]"
     echo "  -p  Palette size (default: 16 and 256)"
-    echo "  -d  Dither mode: no, sierra, sobol, bayer"
+    echo "  -d  Dither mode: none, sierra, sobol, bayer"
     echo "  -a  Algorithm(s), comma-separated: ${valid_algorithms[*]}"
     echo "  -s  Show output"
     exit 1
@@ -44,7 +44,7 @@ while getopts "p:d:a:sh" opt; do
         p) palette_size="$OPTARG" ;;
         d)
             case "$OPTARG" in
-                no|sierra|sobol|bayer) dither="$OPTARG" ;;
+                none|sierra|sobol|bayer) dither="$OPTARG" ;;
                 *) echo "Invalid dither: $OPTARG"; usage ;;
             esac
             ;;
