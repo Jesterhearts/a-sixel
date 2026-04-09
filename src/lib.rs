@@ -298,23 +298,27 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
     ) -> String {
         #[cfg(feature = "partial-transparency")]
         {
+            use std::sync::LazyLock;
             use std::time::Duration;
 
-            let bg_color = termbg::rgb(Duration::from_millis(100))
-                .map(|rgb| {
-                    Rgba([
-                        (rgb.r as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
-                        (rgb.g as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
-                        (rgb.b as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
-                        u8::MAX,
-                    ])
-                })
-                .unwrap_or(Rgba([0, 0, 0, u8::MAX]));
+            static BG_COLOR: LazyLock<Rgba<u8>> = LazyLock::new(|| {
+                termbg::rgb(Duration::from_millis(100))
+                    .map(|rgb| {
+                        Rgba([
+                            (rgb.r as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
+                            (rgb.g as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
+                            (rgb.b as f32 / u16::MAX as f32 * u8::MAX as f32) as u8,
+                            u8::MAX,
+                        ])
+                    })
+                    .unwrap_or(Rgba([0, 0, 0, u8::MAX]))
+            });
+
             image.par_pixels_mut().for_each(|pixel| {
                 use image::Pixel;
                 use image::Rgba;
 
-                let mut color = Rgba([bg_color[0], bg_color[1], bg_color[2], pixel[3]]);
+                let mut color = Rgba([BG_COLOR[0], BG_COLOR[1], BG_COLOR[2], pixel[3]]);
                 color.blend(pixel);
                 *pixel = color;
             });
