@@ -98,8 +98,11 @@ impl BitPaletteBuilder {
             .collect::<Vec<_>>()
     }
 
-    pub(crate) fn build_bucketer(palette: &[Lab]) -> BitPaletteBucketer {
-        BitPaletteBucketer::new(palette)
+    pub(crate) fn build_bucketer(
+        palette: &[Lab],
+        palette_size: usize,
+    ) -> BitPaletteBucketer {
+        BitPaletteBucketer::new(palette, palette_size)
     }
 }
 
@@ -119,8 +122,10 @@ impl BitPaletteBucketer {
     /// palette entries with distances. Each palette Lab entry is converted to
     /// Srgb to determine which bucket it belongs to, giving us a representative
     /// color per bucket without needing to re-scan the image.
-    fn new(palette: &[Lab]) -> Self {
-        let palette_size = palette.len();
+    fn new(
+        palette: &[Lab],
+        palette_size: usize,
+    ) -> Self {
         let shift = BitPaletteBuilder::shift(palette_size);
         let n_bits = palette_size.ilog2() as usize;
         let masks = morton_dim_masks(n_bits);

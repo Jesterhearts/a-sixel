@@ -13,7 +13,7 @@
 //! let img = RgbaImage::new(100, 100);
 //! println!(
 //!     "{}",
-//!     SixelEncoder::new(PaletteBuilder::BitMergeSixelBest, Dither::Sierra).encode(img)
+//!     SixelEncoder::new(PaletteBuilder::BitMergeBest, Dither::Sierra).encode(img)
 //! );
 //! ```
 //!
@@ -283,11 +283,13 @@ impl PaletteBuilder {
     fn build_bucketer(
         &self,
         palette: &[Lab],
+        palette_size: usize,
     ) -> dither::PaletteBucketer {
         match self {
-            Self::Bit => {
-                dither::PaletteBucketer::Bit(bit::BitPaletteBuilder::build_bucketer(palette))
-            }
+            Self::Bit => dither::PaletteBucketer::Bit(bit::BitPaletteBuilder::build_bucketer(
+                palette,
+                palette_size,
+            )),
             _ => dither::PaletteBucketer::KdTree(dither::KdTreeBucketer::new(palette)),
         }
     }
@@ -452,7 +454,7 @@ impl SixelEncoder {
                 push_usize(&mut sixel_string, (hsl.saturation * 100.0).round() as usize);
             }
 
-            let bucketer = self.algorithm.build_bucketer(&palette);
+            let bucketer = self.algorithm.build_bucketer(&palette, palette_size);
             let paletted_pixels = self
                 .dither
                 .dither_and_palettize(&image, &palette, &bucketer);
