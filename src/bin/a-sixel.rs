@@ -56,9 +56,16 @@ enum Dither {
 #[derive(Debug, Parser)]
 #[command(name = "a-sixel", about = "Encode images as sixel graphics")]
 struct Args {
-    /// The path to the image file to be loaded and rendered
-    #[clap(long, short)]
-    image_path: String,
+    /// The path to the image file to be loaded and rendered.
+    ///
+    /// At least one of this positional argument or -i/--image-path is required.
+    /// If both this and the -i/--image-path argument is specified, the -i
+    /// argument will be preferred.
+    positional_image_path: Option<String>,
+
+    /// The path to the image file to be loaded and rendered.
+    #[clap(long = "image_path", short = 'i')]
+    specified_image_path: Option<String>,
 
     /// The palette size to use for quantization, will be rounded to the nearest
     /// power of 2.
@@ -76,7 +83,9 @@ struct Args {
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let image_path = args.image_path;
+    let Some(image_path) = args.specified_image_path.or(args.positional_image_path) else {
+        anyhow::bail!("An image path must be specified")
+    };
 
     let image = image::load_from_memory(&read(image_path)?)?;
     let image = image.to_rgba8();
