@@ -17,31 +17,31 @@ name              = "a-sixel"
 required-features = ["cli"]
 
 [dependencies]
-anyhow        = { version = "1.0.100", optional = true }
-atomic_float  = { version = "1.1.0", optional = true }
-clap          = { version = "4.5.48", features = ["derive"], optional = true }
-dashmap       = { version = "6.1.0", features = ["rayon"], optional = true }
-dilate        = "0.6.3"
-dssim-core    = { version = "3.4.0", optional = true }
-image         = { version = "0.25.8", default-features = false, features = [
+anyhow          = { version = "1.0.100", optional = true }
+atomic_float    = { version = "1.1.0", optional = true }
+clap            = { version = "4.5.48", features = ["derive"], optional = true }
+dashmap         = { version = "6.1.0", features = ["rayon"], optional = true }
+dilate          = "0.6.3"
+dssim-core      = { version = "3.4.0", optional = true }
+image           = { version = "0.25.8", default-features = false, features = [
   "rayon"
 ] }
-image_hasher  = { version = "3.0.0", optional = true }
-itoa          = "1.0.18"
-kiddo         = "5.2.2"
-libblur       = { version = "0.23.3", optional = true }
-ndarray       = { version = "0.17.2", optional = true }
-ordered-float = "5.1.0"
-palette       = { version = "0.7.6", default-features = false, features = [
+image_hasher    = { version = "3.0.0", optional = true }
+itoa            = "1.0.18"
+kiddo           = "5.2.2"
+libblur         = { version = "0.23.3", optional = true }
+nalgebra-sparse = { version = "0.11.0", optional = true }
+ordered-float   = "5.1.0"
+palette         = { version = "0.7.6", default-features = false, features = [
   "std"
 ] }
-rayon         = "1.11.0"
-rgb           = { version = "0.8.52", optional = true }
-rustfft       = { version = "6.4.1", optional = true }
-rustyml       = { version = "0.11.0", features = ["utility"], optional = true }
-sobol_burley  = "0.5.0"
-strum         = { version = "0.28.0", features = ["derive"], optional = true }
-termbg        = { version = "0.6.2", optional = true }
+rayon           = "1.11.0"
+rgb             = { version = "0.8.52", optional = true }
+rustfft         = { version = "6.4.1", optional = true }
+single_algebra  = { version = "0.9.2", optional = true }
+sobol_burley    = "0.5.0"
+strum           = { version = "0.28.0", features = ["derive"], optional = true }
+termbg          = { version = "0.6.2", optional = true }
 
 [dev-dependencies]
 anyhow = "1.0.100"
@@ -92,7 +92,7 @@ median-cut           = []
 octree               = []
 partial-transparency = ["dep:termbg"]
 strum                = ["dep:strum"]
-wu                   = ["dep:ndarray", "dep:rustyml"]
+wu                   = ["dep:nalgebra-sparse", "dep:single_algebra"]
 
 [profile.release-debug]
 inherits = "release"

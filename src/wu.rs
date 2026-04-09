@@ -8,15 +8,15 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashSet;
 
-use ndarray::Array2;
+use nalgebra_sparse::CooMatrix;
+use nalgebra_sparse::CsrMatrix;
 use ordered_float::OrderedFloat;
 use palette::Lab;
 use palette::color_difference::EuclideanDistance;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 use rayon::slice::ParallelSliceMut;
-use rustyml::utility::SVDSolver;
-use rustyml::utility::principal_component_analysis::PCA;
+use single_algebra::dimred::pca::SparsePCABuilder;
 
 use crate::rgba_to_lab;
 
@@ -50,71 +50,81 @@ impl Hist {
     }
 
     fn split(&mut self) -> (Self, Self) {
-        let data = Array2::from_shape_fn((self.points.len(), 3), |(i, j)| match j {
-            0 => self.points[i].l as f64,
-            1 => self.points[i].a as f64,
-            2 => self.points[i].b as f64,
-            _ => unreachable!(),
-        });
+        let Ok(data) = CooMatrix::try_from_triplets_iter(
+            self.points.len(),
+            3,
+            (0..self.points.len()).flat_map(|i| {
+                [
+                    (i, 1, self.points[i].l as f32),
+                    (i, 2, self.points[i].a as f32),
+                    (i, 3, self.points[i].b as f32),
+                ]
+                .into_iter()
+            }),
+        ) else {
+            return self.split_fallback();
+        };
 
-        let pca = PCA::new(3, SVDSolver::Full);
+        let data = CsrMatrix::from(&data);
 
-        match pca.and_then(|mut pca| pca.fit_transform(&data)) {
-            Ok(projection) => {
-                let mut projections = projection
-                    .column(0)
-                    .into_iter()
-                    .zip(self.points.iter())
-                    .map(|(proj, point)| (*proj as f32, *point))
-                    .collect::<Vec<_>>();
-                projections.par_sort_by_key(|(v, _)| OrderedFloat(*v));
+        let mut pca = SparsePCABuilder::new().build();
+        let Ok(projection) = pca.fit_transform(&data) else {
+            return self.split_fallback();
+        };
 
-                let left = projections[..projections.len() / 2]
-                    .iter()
-                    .copied()
-                    .map(|(_, p)| p)
-                    .collect::<Vec<_>>();
-                let right = projections[projections.len() / 2..]
-                    .iter()
-                    .copied()
-                    .map(|(_, p)| p)
-                    .collect::<Vec<_>>();
+        let mut projections = projection
+            .column(0)
+            .into_iter()
+            .zip(self.points.iter())
+            .map(|(proj, point)| (*proj as f32, *point))
+            .collect::<Vec<_>>();
+        projections.par_sort_by_key(|(v, _)| OrderedFloat(*v));
 
-                (Self::new(left), Self::new(right))
-            }
-            Err(_) => {
-                let l_var = self
-                    .points
-                    .par_iter()
-                    .map(|p| (p.l - self.mean.l).powi(2))
-                    .sum::<f32>();
+        let left = projections[..projections.len() / 2]
+            .iter()
+            .copied()
+            .map(|(_, p)| p)
+            .collect::<Vec<_>>();
+        let right = projections[projections.len() / 2..]
+            .iter()
+            .copied()
+            .map(|(_, p)| p)
+            .collect::<Vec<_>>();
 
-                let a_var = self
-                    .points
-                    .par_iter()
-                    .map(|p| (p.a - self.mean.a).powi(2))
-                    .sum::<f32>();
+        (Self::new(left), Self::new(right))
+    }
 
-                let b_var = self
-                    .points
-                    .par_iter()
-                    .map(|p| (p.b - self.mean.b).powi(2))
-                    .sum::<f32>();
+    fn split_fallback(&mut self) -> (Self, Self) {
+        let l_var = self
+            .points
+            .par_iter()
+            .map(|p| (p.l - self.mean.l).powi(2))
+            .sum::<f32>();
 
-                if l_var >= a_var && l_var >= b_var {
-                    self.points.sort_by_key(|p| OrderedFloat(p.l));
-                } else if a_var >= b_var {
-                    self.points.sort_by_key(|p| OrderedFloat(p.a));
-                } else {
-                    self.points.sort_by_key(|p| OrderedFloat(p.b));
-                }
+        let a_var = self
+            .points
+            .par_iter()
+            .map(|p| (p.a - self.mean.a).powi(2))
+            .sum::<f32>();
 
-                let left_points = self.points[..self.points.len() / 2].to_vec();
-                let right_points = self.points[self.points.len() / 2..].to_vec();
+        let b_var = self
+            .points
+            .par_iter()
+            .map(|p| (p.b - self.mean.b).powi(2))
+            .sum::<f32>();
 
-                (Self::new(left_points), Self::new(right_points))
-            }
+        if l_var >= a_var && l_var >= b_var {
+            self.points.sort_by_key(|p| OrderedFloat(p.l));
+        } else if a_var >= b_var {
+            self.points.sort_by_key(|p| OrderedFloat(p.a));
+        } else {
+            self.points.sort_by_key(|p| OrderedFloat(p.b));
         }
+
+        let left_points = self.points[..self.points.len() / 2].to_vec();
+        let right_points = self.points[self.points.len() / 2..].to_vec();
+
+        (Self::new(left_points), Self::new(right_points))
     }
 }
 
