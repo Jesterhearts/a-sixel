@@ -2,7 +2,9 @@ use std::fs::read;
 use std::io::Cursor;
 use std::io::IsTerminal;
 use std::io::Read;
+use std::io::Write;
 use std::io::stdin;
+use std::io::stdout;
 
 use a_sixel::PaletteBuilder;
 use a_sixel::SixelEncoder;
@@ -83,12 +85,15 @@ fn main() -> anyhow::Result<()> {
         image_data = buf;
     }
 
+    let mut stdout = stdout().lock();
     let encoder = SixelEncoder::new(args.algorithm, args.dither);
-
     for image in split_images(&image_data)? {
         let six = encoder.encode_with_palette_size(image, args.palette_size);
-        println!("{six}");
+
+        stdout.write_all(six.as_bytes())?;
+        stdout.write_all(b"\n")?;
     }
+    stdout.flush()?;
 
     Ok(())
 }

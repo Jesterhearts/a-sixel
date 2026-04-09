@@ -143,7 +143,6 @@ use palette::IntoColor;
 use palette::Lab;
 use palette::encoding::Srgb;
 use rayon::iter::IndexedParallelIterator;
-use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use rayon::slice::ParallelSlice;
 use rayon::slice::ParallelSliceMut;
@@ -658,14 +657,15 @@ impl SixelEncoder {
 
             let width = image.width() as usize;
 
-            paletted_pixels
+            let lens: Vec<_> = paletted_pixels
                 .par_chunks(width * 6)
                 .zip(image.into_raw().par_chunks(width * 6 * 4))
                 .zip(sixel_string[str_idx..].par_chunks_mut(string_chunk_size))
-                .for_each(|((palette_chunk, rgba_chunk), sixel_string)| {
+                .map(|((palette_chunk, rgba_chunk), sixel_string)| {
                     let mut str_idx = 0;
                     let mut color_bits = vec![0u8; palette_size * width];
                     let chunk_height = palette_chunk.len() / width;
+                    let mut used = vec![false; palette_size];
 
                     for row in 0..chunk_height {
                         let bit = 1u8 << row;
@@ -675,31 +675,61 @@ impl SixelEncoder {
                             if rgba_chunk[pixel_idx * 4 + 3] != 0 {
                                 let color = palette_chunk[pixel_idx];
                                 color_bits[color * width + col] |= bit;
+                                used[color] = true;
                             }
                         }
                     }
 
-                    color_bits.par_iter_mut().for_each(|d| {
-                        *d += 0x3f;
-                    });
+                    for color in used.iter().enumerate().filter_map(|(c, u)| u.then_some(c)) {
+                        let base = color * width;
+                        let row = &color_bits[base..base + width];
 
-                    for color in 0..palette_size {
+                        let end = row.iter().rposition(|&b| b != 0).map_or(0, |p| p + 1);
                         sixel_string[str_idx].write(b'#');
                         str_idx += 1;
                         push_usize(sixel_string, &mut str_idx, color);
-                        let base = color * width;
-                        for byte in &color_bits[base..base + width] {
-                            sixel_string[str_idx].write(*byte);
-                            str_idx += 1;
+
+                        let mut i = 0;
+                        while i < end {
+                            let raw = row[i];
+                            let mut run_len = 1;
+                            while i + run_len < end && row[i + run_len] == raw {
+                                run_len += 1;
+                            }
+
+                            if run_len >= 4 {
+                                sixel_string[str_idx].write(b'!');
+                                str_idx += 1;
+                                push_usize(sixel_string, &mut str_idx, run_len);
+                                sixel_string[str_idx].write(raw + 0x3f);
+                                str_idx += 1;
+                            } else {
+                                let byte = raw + 0x3f;
+                                for _ in 0..run_len {
+                                    sixel_string[str_idx].write(byte);
+                                    str_idx += 1;
+                                }
+                            }
+                            i += run_len;
                         }
+
                         sixel_string[str_idx].write(b'$');
                         str_idx += 1;
                     }
 
                     sixel_string[str_idx].write(b'-');
-                });
+                    str_idx += 1;
+                    str_idx
+                })
+                .collect();
 
-            str_idx += strings_len;
+            let mut src = str_idx + string_chunk_size;
+            str_idx += lens[0];
+            for len in &lens[1..] {
+                sixel_string.copy_within(src..src + *len, str_idx);
+                src += string_chunk_size;
+                str_idx += *len;
+            }
         }
 
         for byte in br#"\"# {
