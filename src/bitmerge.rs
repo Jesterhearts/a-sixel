@@ -33,27 +33,18 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 
-use crate::BitPaletteBuilder;
-use crate::PaletteBuilder;
+use crate::bit::BitPaletteBuilder;
 use crate::kmeans::parallel_kmeans;
-use crate::private;
 
-pub struct BitMergePaletteBuilder<
+pub(crate) struct BitMergePaletteBuilder<
     const STAGE_1_PALETTE_SIZE: usize = { 1 << 18 },
     const STAGE_2_PALETTE_SIZE: usize = 512,
 >;
 
-impl<const STAGE_1_PALETTE_SIZE: usize, const STAGE_2_PALETTE_SIZE: usize> private::Sealed
-    for BitMergePaletteBuilder<STAGE_1_PALETTE_SIZE, STAGE_2_PALETTE_SIZE>
+impl<const STAGE_1_PALETTE_SIZE: usize, const STAGE_2_PALETTE_SIZE: usize>
+    BitMergePaletteBuilder<STAGE_1_PALETTE_SIZE, STAGE_2_PALETTE_SIZE>
 {
-}
-
-impl<const STAGE_1_PALETTE_SIZE: usize, const STAGE_2_PALETTE_SIZE: usize> PaletteBuilder
-    for BitMergePaletteBuilder<STAGE_1_PALETTE_SIZE, STAGE_2_PALETTE_SIZE>
-{
-    const NAME: &'static str = "Bit-Merge";
-
-    fn build_palette(
+    pub(crate) fn build_palette(
         image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<palette::Lab> {

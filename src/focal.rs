@@ -20,18 +20,12 @@ use rustfft::FftPlanner;
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Zero;
 
-use crate::PaletteBuilder;
-use crate::private;
 use crate::rgba_to_lab;
 
-pub struct FocalPaletteBuilder;
+pub(crate) struct FocalPaletteBuilder;
 
-impl private::Sealed for FocalPaletteBuilder {}
-
-impl PaletteBuilder for FocalPaletteBuilder {
-    const NAME: &'static str = "Focal";
-
-    fn build_palette(
+impl FocalPaletteBuilder {
+    pub(crate) fn build_palette(
         image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {

@@ -5,37 +5,46 @@
 //! ### Simple Encoding
 //!
 //! ```rust
-//! use a_sixel::BitMergeSixelEncoderBest;
+//! use a_sixel::PaletteBuilder;
+//! use a_sixel::SixelEncoder;
+//! use a_sixel::dither::Dither;
 //! use image::RgbaImage;
 //!
 //! let img = RgbaImage::new(100, 100);
-//! println!("{}", <BitMergeSixelEncoderBest>::encode(img));
+//! println!(
+//!     "{}",
+//!     SixelEncoder::new(PaletteBuilder::BitMergeSixelBest, Dither::Sierra).encode(img)
+//! );
 //! ```
 //!
 //! ### Loading and Encoding an Image File
 //!
 //! ```rust
-//! use a_sixel::KMeansSixelEncoder;
-//! use image;
+//! use a_sixel::PaletteBuilder;
+//! use a_sixel::SixelEncoder;
+//! use a_sixel::dither::Dither;
 //!
 //! // Load an image from file
 //! let image = image::open("examples/transparent.png").unwrap().to_rgba8();
 //!
-//! // Encode with default settings (256 colors, Sierra dithering)
-//! let sixel_output = <KMeansSixelEncoder>::encode(image);
+//! // Encode with 256 colors and Sierra dithering
+//! let encoder = SixelEncoder::new(PaletteBuilder::KMeans, Dither::Sierra);
+//! let sixel_output = encoder.encode(image);
 //! println!("{}", sixel_output);
 //! ```
 //!
 //! ### Custom Palette Size and Dithering
 //!
 //! ```rust
-//! use a_sixel::BitSixelEncoder;
-//! use a_sixel::dither::NoDither;
+//! use a_sixel::PaletteBuilder;
+//! use a_sixel::SixelEncoder;
+//! use a_sixel::dither::Dither;
 //!
 //! let image = image::open("examples/transparent.png").unwrap().to_rgba8();
 //!
 //! // Use 16 colors with no dithering for faster encoding
-//! let sixel_output = BitSixelEncoder::<NoDither>::encode_with_palette_size(image, 16);
+//! let encoder = SixelEncoder::new(PaletteBuilder::Bit, Dither::None);
+//! let sixel_output = encoder.encode_with_palette_size(image, 16);
 //! println!("{}", sixel_output);
 //! ```
 //!
@@ -54,14 +63,14 @@
 //! to re-encode the image if the background color changes.
 //!
 //!
-//! ## Choosing an Encoder
+//! ## Choosing a `PaletteBuilder`
 //! - I want good quality:
-//!   - Use `BitMergeSixelEncoderBest` or `KMeansSixelEncoder`.
+//!   - Use [`PaletteBuilder::BitMergeBest`] or [`PaletteBuilder::KMeans`].
 //! - I'm time constrained:
-//!   - Use `BitMergeSixelEncoderLow`, `BitSixelEncoder`, or
-//!     `OctreeSixelEncoder`.
+//!   - Use [`PaletteBuilder::BitMergeLow`], [`PaletteBuilder::Bit`], or
+//!     [`PaletteBuilder::Octree`].
 //! - I'm _really_ time constrained and can sacrifice a little quality:
-//!   - Use `BitSixelEncoder<NoDither>`.
+//!   - Use [`PaletteBuilder::Bit`] with [`Dither::None`](dither::Dither::None).
 //!
 //! For a more detailed breakdown, here's the encoders by average speed and
 //! quality against the test images (speed figures will vary) at 256 colors with
@@ -135,110 +144,199 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use rayon::slice::ParallelSlice;
+#[cfg(feature = "strum")]
+use strum::Display;
+#[cfg(feature = "strum")]
+use strum::EnumString;
 
-#[cfg(feature = "adu")]
-pub use crate::adu::ADUPaletteBuilder;
-pub use crate::bit::BitPaletteBuilder;
-#[cfg(feature = "bit-merge")]
-pub use crate::bitmerge::BitMergePaletteBuilder;
-use crate::dither::Dither;
-use crate::dither::Sierra;
-#[cfg(feature = "focal")]
-pub use crate::focal::FocalPaletteBuilder;
-#[cfg(feature = "k-means")]
-pub use crate::kmeans::KMeansPaletteBuilder;
-#[cfg(feature = "k-medians")]
-pub use crate::kmedians::KMediansPaletteBuilder;
-#[cfg(feature = "median-cut")]
-pub use crate::median_cut::MedianCutPaletteBuilder;
-#[cfg(feature = "octree")]
-pub use crate::octree::OctreePaletteBuilder;
-#[cfg(feature = "wu")]
-pub use crate::wu::WuPaletteBuilder;
-
-mod private {
-    pub trait Sealed {}
+/// The palette building algorithm to use for color quantization.
+///
+/// # Choosing an algorithm
+/// - [`PaletteBuilder::BitMergeBest`] or [`PaletteBuilder::KMeans`] for best
+///   quality.
+/// - [`PaletteBuilder::BitMergeLow`], [`PaletteBuilder::Bit`], or
+///   [`PaletteBuilder::Octree`] for speed.
+/// - [`PaletteBuilder::Bit`] combined with
+///   [`Dither::None`](dither::Dither::None) for maximum speed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "strum", derive(EnumString, Display))]
+#[cfg_attr(
+    feature = "strum",
+    strum(ascii_case_insensitive, serialize_all = "kebab-case")
+)]
+#[non_exhaustive]
+pub enum PaletteBuilder {
+    /// Adaptive Distributive Units algorithm.
+    #[cfg(feature = "adu")]
+    Adu,
+    /// Fast bit-dilation bucketing.
+    Bit,
+    /// Bit bucketing + k-means + agglomerative merge (low quality preset).
+    #[cfg(feature = "bit-merge")]
+    BitMergeLow,
+    /// Bit bucketing + k-means + agglomerative merge (default preset).
+    #[cfg(feature = "bit-merge")]
+    BitMerge,
+    /// Bit bucketing + k-means + agglomerative merge (better quality preset).
+    #[cfg(feature = "bit-merge")]
+    BitMergeBetter,
+    /// Bit bucketing + k-means + agglomerative merge (best quality preset).
+    #[cfg(feature = "bit-merge")]
+    BitMergeBest,
+    /// Spectral-residual peak isolation algorithm.
+    #[cfg(feature = "focal")]
+    Focal,
+    /// K-means clustering.
+    #[cfg(feature = "k-means")]
+    KMeans,
+    /// K-medians clustering.
+    #[cfg(feature = "k-medians")]
+    KMedians,
+    /// Median cut quantization.
+    #[cfg(feature = "median-cut")]
+    MedianCut,
+    /// Octree quantization (max-heap merging).
+    #[cfg(feature = "octree")]
+    Octree,
+    /// Octree quantization (min-heap merging).
+    #[cfg(feature = "octree")]
+    OctreeMinHeap,
+    /// Wu's PCA-based quantization.
+    #[cfg(feature = "wu")]
+    Wu,
 }
 
-pub trait PaletteBuilder: private::Sealed {
-    const NAME: &'static str;
+impl PaletteBuilder {
+    #[cfg(feature = "dump-image")]
+    fn name(&self) -> &'static str {
+        match self {
+            #[cfg(feature = "adu")]
+            Self::Adu => "ADU",
+            Self::Bit => "Bit",
+            #[cfg(feature = "bit-merge")]
+            Self::BitMergeLow | Self::BitMerge | Self::BitMergeBetter | Self::BitMergeBest => {
+                "Bit-Merge"
+            }
+            #[cfg(feature = "focal")]
+            Self::Focal => "Focal",
+            #[cfg(feature = "k-means")]
+            Self::KMeans => "K-Means",
+            #[cfg(feature = "k-medians")]
+            Self::KMedians => "K-Medians",
+            #[cfg(feature = "median-cut")]
+            Self::MedianCut => "Median-Cut",
+            #[cfg(feature = "octree")]
+            Self::Octree | Self::OctreeMinHeap => "Octree",
+            #[cfg(feature = "wu")]
+            Self::Wu => "Wu",
+        }
+    }
 
-    /// Take in an image and return a quantized palette based on the colors in
-    /// the image. The returned vector may be `<= palette_size` in length.
     fn build_palette(
+        &self,
         image: &RgbaImage,
         palette_size: usize,
-    ) -> Vec<Lab>;
+    ) -> Vec<Lab> {
+        match self {
+            #[cfg(feature = "adu")]
+            Self::Adu => adu::ADUPaletteBuilder::build_palette(image, palette_size),
+            Self::Bit => bit::BitPaletteBuilder::build_palette(image, palette_size),
+            #[cfg(feature = "bit-merge")]
+            Self::BitMergeLow => {
+                bitmerge::BitMergePaletteBuilder::<{ 1 << 14 }>::build_palette(image, palette_size)
+            }
+            #[cfg(feature = "bit-merge")]
+            Self::BitMerge => {
+                <bitmerge::BitMergePaletteBuilder>::build_palette(image, palette_size)
+            }
+            #[cfg(feature = "bit-merge")]
+            Self::BitMergeBetter => {
+                bitmerge::BitMergePaletteBuilder::<{ 1 << 20 }>::build_palette(image, palette_size)
+            }
+            #[cfg(feature = "bit-merge")]
+            Self::BitMergeBest => {
+                bitmerge::BitMergePaletteBuilder::<{ 1 << 21 }>::build_palette(image, palette_size)
+            }
+            #[cfg(feature = "focal")]
+            Self::Focal => focal::FocalPaletteBuilder::build_palette(image, palette_size),
+            #[cfg(feature = "k-means")]
+            Self::KMeans => kmeans::KMeansPaletteBuilder::build_palette(image, palette_size),
+            #[cfg(feature = "k-medians")]
+            Self::KMedians => kmedians::KMediansPaletteBuilder::build_palette(image, palette_size),
+            #[cfg(feature = "median-cut")]
+            Self::MedianCut => {
+                median_cut::MedianCutPaletteBuilder::build_palette(image, palette_size)
+            }
+            #[cfg(feature = "octree")]
+            Self::Octree => {
+                octree::OctreePaletteBuilder::<false>::build_palette(image, palette_size)
+            }
+            #[cfg(feature = "octree")]
+            Self::OctreeMinHeap => {
+                octree::OctreePaletteBuilder::<true>::build_palette(image, palette_size)
+            }
+            #[cfg(feature = "wu")]
+            Self::Wu => wu::WuPaletteBuilder::build_palette(image, palette_size),
+        }
+    }
 
-    /// Build a [`PaletteBucketer`](dither::PaletteBucketer) that maps pixels to
-    /// entries in the given palette. The default implementation returns a
-    /// [`KdTreeBucketer`](dither::KdTreeBucketer); palette builders with a
-    /// faster native mapping (e.g. [`BitPaletteBuilder`]) override this.
     fn build_bucketer(
+        &self,
         palette: &[Lab],
-        _palette_size: usize,
-    ) -> impl dither::PaletteBucketer {
-        dither::KdTreeBucketer::new(palette)
+    ) -> dither::PaletteBucketer {
+        match self {
+            Self::Bit => {
+                dither::PaletteBucketer::Bit(bit::BitPaletteBuilder::build_bucketer(palette))
+            }
+            _ => dither::PaletteBucketer::KdTree(dither::KdTreeBucketer::new(palette)),
+        }
     }
 }
 
 /// The main type for performing sixel encoding.
 ///
-/// It is provided with two generic parameters:
-/// - A [`PaletteBuilder`] to generate a color palette from the input image
-///   (sixel only supports up to 256 colors).
-/// - A [`Dither`] type to apply dithering to the reduced color image before
-///   encoding it into sixel format.
-///
-/// A number of type aliases are provided for common configurations, such as
-/// [`ADUSixelEncoder`], which uses the [`ADUPaletteBuilder`].
+/// Combines a [`PaletteBuilder`] to generate a color palette from the input
+/// image (sixel only supports up to 256 colors) with a
+/// [`Dither`](dither::Dither) algorithm to apply dithering to the reduced color
+/// image before encoding it into sixel format.
 ///
 /// # Choosing a `PaletteBuilder`
-/// - [`BitMergePaletteBuilder`] or [`KMeansPaletteBuilder`] are good default
-///   choices for minimizing the error across the image.
-/// - [`FocalPaletteBuilder`] is a good choice if the image has highlights and
+/// - [`PaletteBuilder::BitMergeBest`] or [`PaletteBuilder::KMeans`] are good
+///   default choices for minimizing the error across the image.
+/// - [`PaletteBuilder::Focal`] is a good choice if the image has highlights and
 ///   other details that other encoders might squash, but is experimental. It is
 ///   a weighted k-means implementation. Depending on the image, `KMeans` may be
 ///   able to capture these highlights already, but it's worth trying if you're
 ///   trying to preserve specific image characteristics.
 ///
 /// # Choosing a `Dither`
-/// - [`Sierra`] is a good default choice for dithering, as it produces
-///   high-quality results with minimal artifacts.
-/// - [`NoDither`](dither::NoDither) can be used if performance is a concern.
-pub struct SixelEncoder<P: PaletteBuilder = BitPaletteBuilder, D: Dither = Sierra> {
-    _p: std::marker::PhantomData<P>,
-    _d: std::marker::PhantomData<D>,
+/// - [`Dither::Sierra`](dither::Dither::Sierra) is a good default choice for
+///   dithering, as it produces high-quality results with minimal artifacts.
+/// - [`Dither::None`](dither::Dither::None) can be used if performance is a
+///   concern.
+#[derive(Debug, Clone, Copy)]
+pub struct SixelEncoder {
+    pub algorithm: PaletteBuilder,
+    pub dither: dither::Dither,
 }
 
-#[cfg(feature = "adu")]
-pub type ADUSixelEncoder<D = Sierra> = SixelEncoder<ADUPaletteBuilder, D>;
-#[cfg(feature = "bit-merge")]
-pub type BitMergeSixelEncoderLow<D = Sierra> = SixelEncoder<BitMergePaletteBuilder<{ 1 << 14 }>, D>;
-#[cfg(feature = "bit-merge")]
-pub type BitMergeSixelEncoder<D = Sierra> = SixelEncoder<BitMergePaletteBuilder, D>;
-#[cfg(feature = "bit-merge")]
-pub type BitMergeSixelEncoderBetter<D = Sierra> =
-    SixelEncoder<BitMergePaletteBuilder<{ 1 << 20 }>, D>;
-#[cfg(feature = "bit-merge")]
-pub type BitMergeSixelEncoderBest<D = Sierra> =
-    SixelEncoder<BitMergePaletteBuilder<{ 1 << 21 }>, D>;
-pub type BitSixelEncoder<D = Sierra> = SixelEncoder<BitPaletteBuilder, D>;
-#[cfg(feature = "focal")]
-pub type FocalSixelEncoder<D = Sierra> = SixelEncoder<FocalPaletteBuilder, D>;
-#[cfg(feature = "k-means")]
-pub type KMeansSixelEncoder<D = Sierra> = SixelEncoder<KMeansPaletteBuilder, D>;
-#[cfg(feature = "k-medians")]
-pub type KMediansSixelEncoder<D = Sierra> = SixelEncoder<KMediansPaletteBuilder, D>;
-#[cfg(feature = "median-cut")]
-pub type MedianCutSixelEncoder<D = Sierra> = SixelEncoder<MedianCutPaletteBuilder, D>;
-#[cfg(feature = "octree")]
-pub type OctreeSixelEncoder<D = Sierra, const USE_MIN_HEAP: bool = false> =
-    SixelEncoder<OctreePaletteBuilder<USE_MIN_HEAP>, D>;
-#[cfg(feature = "wu")]
-pub type WuSixelEncoder<D = Sierra> = SixelEncoder<WuPaletteBuilder, D>;
+impl Default for SixelEncoder {
+    fn default() -> Self {
+        Self {
+            algorithm: PaletteBuilder::Bit,
+            dither: dither::Dither::Sierra,
+        }
+    }
+}
 
-impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
+impl SixelEncoder {
+    pub fn new(
+        algorithm: PaletteBuilder,
+        dither: dither::Dither,
+    ) -> Self {
+        Self { algorithm, dither }
+    }
+
     /// Encode an RGBA image into sixel format with the default palette size of
     /// 256 colors.
     ///
@@ -264,8 +362,11 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
     ///   feature is enabled, these are blended with the detected terminal
     ///   background color. Otherwise, treated as opaque.
     /// - **Opaque pixels** (alpha = 255): Encoded normally
-    pub fn encode(rgba: RgbaImage) -> String {
-        Self::encode_with_palette_size(rgba, 256)
+    pub fn encode(
+        &self,
+        rgba: RgbaImage,
+    ) -> String {
+        self.encode_with_palette_size(rgba, 256)
     }
 
     /// Encode an RGBA image into sixel format with a custom palette size.
@@ -293,6 +394,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
     /// Same as [`encode`](Self::encode) - see that method's documentation for
     /// details.
     pub fn encode_with_palette_size(
+        &self,
         #[allow(unused_mut)] mut image: RgbaImage,
         palette_size: usize,
     ) -> String {
@@ -326,7 +428,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
         let palette = if image.width().saturating_mul(image.height()) < palette_size as u32 {
             image.pixels().copied().map(rgba_to_lab).collect::<Vec<_>>()
         } else {
-            P::build_palette(&image, palette_size)
+            self.algorithm.build_palette(&image, palette_size)
         };
 
         let mut sixel_string = r#"P9;1q"1;1;"#.to_string();
@@ -350,8 +452,10 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                 push_usize(&mut sixel_string, (hsl.saturation * 100.0).round() as usize);
             }
 
-            let bucketer = P::build_bucketer(&palette, palette_size);
-            let paletted_pixels = D::dither_and_palettize(&image, &palette, &bucketer);
+            let bucketer = self.algorithm.build_bucketer(&palette);
+            let paletted_pixels = self
+                .dither
+                .dither_and_palettize(&image, &palette, &bucketer);
 
             #[cfg(feature = "dump-mse")]
             {
@@ -502,7 +606,7 @@ impl<P: PaletteBuilder, D: Dither> SixelEncoder<P, D> {
                 let rand = BuildHasher::build_hasher(&RandomState::new()).finish();
 
                 output_image
-                    .save(format!("{}-{rand}.png", P::NAME))
+                    .save(format!("{}-{rand}.png", self.algorithm.name()))
                     .expect("Failed to save output image");
             }
 

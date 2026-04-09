@@ -14,20 +14,14 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 
-use crate::BitPaletteBuilder;
-use crate::PaletteBuilder;
-use crate::private;
+use crate::bit::BitPaletteBuilder;
 use crate::rgba_to_lab;
 
 /// Performs K-Means clustering on the image's pixels to build a palette.
-pub struct KMeansPaletteBuilder;
+pub(crate) struct KMeansPaletteBuilder;
 
-impl private::Sealed for KMeansPaletteBuilder {}
-
-impl PaletteBuilder for KMeansPaletteBuilder {
-    const NAME: &'static str = "K-Means";
-
-    fn build_palette(
+impl KMeansPaletteBuilder {
+    pub(crate) fn build_palette(
         image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {

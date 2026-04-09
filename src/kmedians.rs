@@ -18,19 +18,13 @@ use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 use rayon::slice::ParallelSliceMut;
 
-use crate::BitPaletteBuilder;
-use crate::PaletteBuilder;
-use crate::private;
+use crate::bit::BitPaletteBuilder;
 use crate::rgba_to_lab;
 
-pub struct KMediansPaletteBuilder;
+pub(crate) struct KMediansPaletteBuilder;
 
-impl private::Sealed for KMediansPaletteBuilder {}
-
-impl PaletteBuilder for KMediansPaletteBuilder {
-    const NAME: &'static str = "K-Medians";
-
-    fn build_palette(
+impl KMediansPaletteBuilder {
+    pub(crate) fn build_palette(
         image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {

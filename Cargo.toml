@@ -1,6 +1,6 @@
 [package]
 name        = "a-sixel"
-version     = "0.7.0"
+version     = "0.8.0"
 edition     = "2024"
 description = "A small sixel + palette selection + dithering library."
 readme      = "README.md"
@@ -45,9 +45,7 @@ termbg        = { version = "0.6.2", optional = true }
 
 [dev-dependencies]
 anyhow = "1.0.100"
-clap   = { version = "4.5.48", features = ["derive"] }
 image  = "0.25.8"
-strum  = { version = "0.28.0", features = ["derive"] }
 
 [build-dependencies]
 rustc_version = "0.4.1"
@@ -72,10 +70,9 @@ cli                  = [
   "all-algorithms",
   "dep:anyhow",
   "dep:clap",
-  "dep:strum",
   "image/jpeg",
   "image/png",
-  "partial-transparency"
+  "strum"
 ]
 # For debugging -- prints the mean & threshold Delta E of the quantized image vs the original image.
 dump-delta-e         = []
@@ -94,6 +91,7 @@ k-medians            = ["dep:atomic_float", "dep:dashmap"]
 median-cut           = []
 octree               = []
 partial-transparency = ["dep:termbg"]
+strum                = ["dep:strum"]
 wu                   = ["dep:ndarray", "dep:rustyml"]
 
 [profile.release-debug]

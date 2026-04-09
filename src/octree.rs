@@ -24,9 +24,6 @@ use rayon::iter::IntoParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 
-use crate::PaletteBuilder;
-use crate::private;
-
 #[derive(Debug, Clone, Copy)]
 struct Node {
     children: [Option<usize>; 8],
@@ -65,7 +62,7 @@ impl<const MIN: bool> Ord for Candidate<MIN> {
 }
 
 #[derive(Debug)]
-pub struct OctreePaletteBuilder<const USE_MIN_HEAP: bool = false> {
+pub(crate) struct OctreePaletteBuilder<const USE_MIN_HEAP: bool = false> {
     nodes: Vec<Node>,
 }
 
@@ -123,11 +120,8 @@ impl<const USE_MIN_HEAP: bool> OctreePaletteBuilder<USE_MIN_HEAP> {
     }
 }
 
-impl<const USE_MIN_HEAP: bool> private::Sealed for OctreePaletteBuilder<USE_MIN_HEAP> {}
-impl<const USE_MIN_HEAP: bool> PaletteBuilder for OctreePaletteBuilder<USE_MIN_HEAP> {
-    const NAME: &'static str = "Octree";
-
-    fn build_palette(
+impl<const USE_MIN_HEAP: bool> OctreePaletteBuilder<USE_MIN_HEAP> {
+    pub(crate) fn build_palette(
         image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<palette::Lab> {

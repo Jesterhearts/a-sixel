@@ -84,8 +84,7 @@ for ps in "${palette_sizes[@]}"; do
     for image_path in "${image_files[@]}"; do
         for alg in "${algorithms[@]}"; do
             cargo_args=(
-                run --release
-                --example image_viewer
+                run --release --features cli
                 --features all-algorithms
                 # --features dump-mse
                 # --features dump-delta-e
@@ -93,7 +92,7 @@ for ps in "${palette_sizes[@]}"; do
                 # --features dump-phash
                 --
                 -i "$image_path"
-                -f "$alg"
+                -a "$alg"
                 -p "$ps"
             )
 

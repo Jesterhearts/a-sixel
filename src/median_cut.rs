@@ -19,16 +19,12 @@ use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use rayon::slice::ParallelSliceMut;
 
-use crate::PaletteBuilder;
-use crate::private;
 use crate::rgba_to_lab;
 
-pub struct MedianCutPaletteBuilder;
-impl private::Sealed for MedianCutPaletteBuilder {}
-impl PaletteBuilder for MedianCutPaletteBuilder {
-    const NAME: &'static str = "Median-Cut";
+pub(crate) struct MedianCutPaletteBuilder;
 
-    fn build_palette(
+impl MedianCutPaletteBuilder {
+    pub(crate) fn build_palette(
         image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {

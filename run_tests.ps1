@@ -46,15 +46,15 @@ foreach ($paletteSize in $paletteSizes) {
             # Build the cargo command
             $cargoArgs = @(
                 "run", "--release", 
-                "--example", "image_viewer",
                 "--features", "all-algorithms", 
+                "--features", "cli",
                 # "--features", "dump-mse", 
                 # "--features", "dump-delta-e", 
                 # "--features", "dump-dssim",
                 # "--features", "dump-phash",
                 "--",
                 "-i", $imagePath,
-                "-f", $algorithm,
+                "-a", $algorithm,
                 "-p", $paletteSize
             )
         

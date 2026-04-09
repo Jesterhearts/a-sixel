@@ -20,17 +20,12 @@ use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 use sobol_burley::sample_4d;
 
-use crate::PaletteBuilder;
-use crate::private;
 use crate::rgba_to_lab;
 
-pub struct ADUPaletteBuilder;
+pub(crate) struct ADUPaletteBuilder;
 
-impl private::Sealed for ADUPaletteBuilder {}
-impl PaletteBuilder for ADUPaletteBuilder {
-    const NAME: &'static str = "ADU";
-
-    fn build_palette(
+impl ADUPaletteBuilder {
+    pub(crate) fn build_palette(
         image: &RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {

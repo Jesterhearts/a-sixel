@@ -11,11 +11,7 @@ use palette::Lab;
 use palette::Srgb;
 use rayon::iter::ParallelIterator;
 
-use crate::PaletteBuilder;
-use crate::dither::PaletteBucketer;
-use crate::private;
-
-pub struct BitPaletteBuilder {
+pub(crate) struct BitPaletteBuilder {
     pub(crate) shift: usize,
 }
 
@@ -45,14 +41,8 @@ impl BitPaletteBuilder {
 
         (rgb >> shift) as usize
     }
-}
 
-impl private::Sealed for BitPaletteBuilder {}
-
-impl PaletteBuilder for BitPaletteBuilder {
-    const NAME: &'static str = "Bit";
-
-    fn build_palette(
+    pub(crate) fn build_palette(
         image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {
@@ -108,20 +98,17 @@ impl PaletteBuilder for BitPaletteBuilder {
             .collect::<Vec<_>>()
     }
 
-    fn build_bucketer(
-        palette: &[Lab],
-        palette_size: usize,
-    ) -> impl PaletteBucketer {
-        BitPaletteBucketer::new(palette, palette_size)
+    pub(crate) fn build_bucketer(palette: &[Lab]) -> BitPaletteBucketer {
+        BitPaletteBucketer::new(palette)
     }
 }
 
-/// A [`PaletteBucketer`] that maps pixels directly to palette entries via the
-/// same bit-dilation bucketing used by [`BitPaletteBuilder`]. This avoids both
-/// the Lab color-space conversion and the KD-tree query for each pixel, making
-/// it significantly faster than
+/// A [`PaletteBucketer`](crate::dither::PaletteBucketer) variant that maps
+/// pixels directly to palette entries via the same bit-dilation bucketing used
+/// by [`BitPaletteBuilder`]. This avoids both the Lab color-space conversion
+/// and the KD-tree query for each pixel, making it significantly faster than
 /// [`KdTreeBucketer`](crate::dither::KdTreeBucketer) when used with
-/// [`NoDither`](crate::dither::NoDither).
+/// [`Dither::None`](crate::dither::Dither::None).
 pub struct BitPaletteBucketer {
     lut: Vec<(usize, usize, f32, f32)>,
     shift: usize,
@@ -132,10 +119,8 @@ impl BitPaletteBucketer {
     /// palette entries with distances. Each palette Lab entry is converted to
     /// Srgb to determine which bucket it belongs to, giving us a representative
     /// color per bucket without needing to re-scan the image.
-    fn new(
-        palette: &[Lab],
-        palette_size: usize,
-    ) -> Self {
+    fn new(palette: &[Lab]) -> Self {
+        let palette_size = palette.len();
         let shift = BitPaletteBuilder::shift(palette_size);
         let n_bits = palette_size.ilog2() as usize;
         let masks = morton_dim_masks(n_bits);
@@ -169,6 +154,33 @@ impl BitPaletteBucketer {
             .collect();
 
         Self { lut, shift }
+    }
+
+    pub(crate) fn nearest(
+        &self,
+        point: &[f32; 3],
+    ) -> usize {
+        let lab = Lab::new(point[0], point[1], point[2]);
+        let rgb: Srgb = lab.into_color();
+        let rgb: Srgb<u8> = rgb.into_format();
+        self.lut[BitPaletteBuilder::index(rgb, self.shift)].0
+    }
+
+    pub(crate) fn nearest_two(
+        &self,
+        point: Rgba<u8>,
+    ) -> [(usize, f32); 2] {
+        let (n1, n2, d1, d2) =
+            self.lut[BitPaletteBuilder::index(Srgb::new(point[0], point[1], point[2]), self.shift)];
+        [(n1, d1), (n2, d2)]
+    }
+
+    pub(crate) fn nearest_rgb(
+        &self,
+        pixel: Rgba<u8>,
+    ) -> usize {
+        let index = BitPaletteBuilder::index(Srgb::new(pixel[0], pixel[1], pixel[2]), self.shift);
+        self.lut[index].0
     }
 }
 
@@ -283,35 +295,4 @@ fn find_second_nearest(
     }
 
     best
-}
-
-impl private::Sealed for BitPaletteBucketer {}
-
-impl PaletteBucketer for BitPaletteBucketer {
-    fn nearest(
-        &self,
-        point: &[f32; 3],
-    ) -> usize {
-        let lab = Lab::new(point[0], point[1], point[2]);
-        let rgb: Srgb = lab.into_color();
-        let rgb: Srgb<u8> = rgb.into_format();
-        self.lut[BitPaletteBuilder::index(rgb, self.shift)].0
-    }
-
-    fn nearest_two(
-        &self,
-        point: Rgba<u8>,
-    ) -> [(usize, f32); 2] {
-        let (n1, n2, d1, d2) =
-            self.lut[BitPaletteBuilder::index(Srgb::new(point[0], point[1], point[2]), self.shift)];
-        [(n1, d1), (n2, d2)]
-    }
-
-    fn nearest_rgb(
-        &self,
-        pixel: Rgba<u8>,
-    ) -> usize {
-        let index = BitPaletteBuilder::index(Srgb::new(pixel[0], pixel[1], pixel[2]), self.shift);
-        self.lut[index].0
-    }
 }

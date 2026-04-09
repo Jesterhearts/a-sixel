@@ -18,8 +18,6 @@ use rayon::slice::ParallelSliceMut;
 use rustyml::utility::SVDSolver;
 use rustyml::utility::principal_component_analysis::PCA;
 
-use crate::PaletteBuilder;
-use crate::private;
 use crate::rgba_to_lab;
 
 #[derive(Debug)]
@@ -149,13 +147,10 @@ impl Ord for Hist {
     }
 }
 
-pub struct WuPaletteBuilder;
+pub(crate) struct WuPaletteBuilder;
 
-impl private::Sealed for WuPaletteBuilder {}
-impl PaletteBuilder for WuPaletteBuilder {
-    const NAME: &'static str = "Wu";
-
-    fn build_palette(
+impl WuPaletteBuilder {
+    pub(crate) fn build_palette(
         image: &image::RgbaImage,
         palette_size: usize,
     ) -> Vec<Lab> {
