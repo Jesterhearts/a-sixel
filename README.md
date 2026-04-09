@@ -11,36 +11,46 @@ A sixel library for encoding images.
 ### Simple Encoding
 
 ```rust
-use a_sixel::BitMergeSixelEncoderBest;
+use a_sixel::PaletteBuilder;
+use a_sixel::SixelEncoder;
+use a_sixel::dither::Dither;
 use image::RgbaImage;
 
 let img = RgbaImage::new(100, 100);
-println!("{}", <BitMergeSixelEncoderBest>::encode(img));
+println!(
+    "{}",
+    SixelEncoder::new(PaletteBuilder::BitMergeBest, Dither::Sierra).encode(img)
+);
 ```
 
 ### Loading and Encoding an Image File
 
 ```rust
-use a_sixel::KMeansSixelEncoder;
-use image;
+use a_sixel::PaletteBuilder;
+use a_sixel::SixelEncoder;
+use a_sixel::dither::Dither;
 
 // Load an image from file
 let image = image::open("examples/transparent.png").unwrap().to_rgba8();
 
-// Encode with default settings (256 colors, Sierra dithering)
-let sixel_output = <KMeansSixelEncoder>::encode(image);
+// Encode with 256 colors and Sierra dithering
+let encoder = SixelEncoder::new(PaletteBuilder::KMeans, Dither::Sierra);
+let sixel_output = encoder.encode(image);
 println!("{}", sixel_output);
 ```
 
 ### Custom Palette Size and Dithering
 
 ```rust
-use a_sixel::{BitSixelEncoder, dither::NoDither};
+use a_sixel::PaletteBuilder;
+use a_sixel::SixelEncoder;
+use a_sixel::dither::Dither;
 
 let image = image::open("examples/transparent.png").unwrap().to_rgba8();
 
 // Use 16 colors with no dithering for faster encoding
-let sixel_output = BitSixelEncoder::<NoDither>::encode_with_palette_size(image, 16);
+let encoder = SixelEncoder::new(PaletteBuilder::Bit, Dither::None);
+let sixel_output = encoder.encode_with_palette_size(image, 16);
 println!("{}", sixel_output);
 ```
 
@@ -57,13 +67,13 @@ this approach, changing the terminal background color will not update partially 
 to match. You will need to re-encode the image if the background color changes.
 
 
-## Choosing an Encoder
+## Choosing a `PaletteBuilder`
 - I want good quality:
-  - Use `BitMergeSixelEncoderBest` or `KMeansSixelEncoder`.
+  - Use `PaletteBuilder::BitMergeBest` or `PaletteBuilder::KMeans`.
 - I'm time constrained:
-  - Use `BitMergeSixelEncoderLow`, `BitSixelEncoder`, or `OctreeSixelEncoder`.
+  - Use `PaletteBuilder::BitMergeLow`, `PaletteBuilder::Bit`, or `PaletteBuilder::Octree`.
 - I'm _really_ time constrained and can sacrifice a little quality:
-  - Use `BitSixelEncoder<NoDither>`.
+  - Use `PaletteBuilder::Bit` with `Dither::None`.
 
 For a more detailed breakdown, here's the encoders by average speed and quality against the test
 images (speed figures will vary) at 256 colors with Sierra dithering:
