@@ -134,6 +134,8 @@ pub mod octree;
 #[cfg(feature = "wu")]
 pub mod wu;
 
+use std::mem::MaybeUninit;
+
 use image::Rgba;
 use image::RgbaImage;
 use palette::Hsl;
@@ -144,6 +146,7 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use rayon::slice::ParallelSlice;
+use rayon::slice::ParallelSliceMut;
 #[cfg(feature = "strum")]
 use strum::Display;
 #[cfg(feature = "strum")]
@@ -404,6 +407,12 @@ impl SixelEncoder {
         #[allow(unused_mut)] mut image: RgbaImage,
         palette_size: usize,
     ) -> String {
+        let palette_size = if palette_size.is_power_of_two() {
+            palette_size
+        } else {
+            1 << palette_size.ilog2()
+        }
+        .clamp(2, 256);
         #[cfg(feature = "partial-transparency")]
         {
             use std::sync::LazyLock;
@@ -431,37 +440,66 @@ impl SixelEncoder {
                 *pixel = color;
             });
         }
+
         let palette = if image.width().saturating_mul(image.height()) < palette_size as u32 {
             image.pixels().copied().map(rgba_to_lab).collect::<Vec<_>>()
         } else {
             self.algorithm.build_palette(&image, palette_size)
         };
 
-        let mut sixel_string = r#"P9;1q"1;1;"#.to_string();
-        push_usize(&mut sixel_string, image.width() as usize);
-        sixel_string.push(';');
-        push_usize(&mut sixel_string, image.height() as usize);
+        // Each sixel row takes max 6 bytes for pallete entry [# | 256 | $ | -].
+        // There are ceil h/6 rows.
+        // There are width bytes of sixel characters per row.
+        let string_chunk_width = (image.width() as usize + 6) * palette_size;
+        let mut sixel_string = Box::new_zeroed_slice(
+            1024 + string_chunk_width * (image.height() as usize).div_ceil(6),
+        );
+        let mut str_idx = 0;
+
+        for byte in br#"P9;1q"1;1;"# {
+            sixel_string[str_idx].write(*byte);
+            str_idx += 1;
+        }
+
+        push_usize(&mut sixel_string, &mut str_idx, image.width() as usize);
+        sixel_string[str_idx].write(b';');
+        str_idx += 1;
+        push_usize(&mut sixel_string, &mut str_idx, image.height() as usize);
 
         if image.width() > 0 && image.height() > 0 {
+            let bucketer = self.algorithm.build_bucketer(&palette, palette_size);
+            let paletted_pixels = self
+                .dither
+                .dither_and_palettize(&image, &palette, &bucketer);
+
             for (i, lab) in palette.iter().copied().enumerate() {
                 let hsl: Hsl = lab.into_color();
                 // Sixel hue is offset by 120 degrees from the common hue values.
                 let deg = (hsl.hue.into_positive_degrees().round() as u16 + 120) % 360;
 
-                sixel_string.push('#');
-                push_usize(&mut sixel_string, i);
-                sixel_string.push_str(";1;");
-                push_usize(&mut sixel_string, deg as usize);
-                sixel_string.push(';');
-                push_usize(&mut sixel_string, (hsl.lightness * 100.0).round() as usize);
-                sixel_string.push(';');
-                push_usize(&mut sixel_string, (hsl.saturation * 100.0).round() as usize);
+                sixel_string[str_idx].write(b'#');
+                str_idx += 1;
+                push_usize(&mut sixel_string, &mut str_idx, i);
+                for byte in b";1;" {
+                    sixel_string[str_idx].write(*byte);
+                    str_idx += 1;
+                }
+                push_usize(&mut sixel_string, &mut str_idx, deg as usize);
+                sixel_string[str_idx].write(b';');
+                str_idx += 1;
+                push_usize(
+                    &mut sixel_string,
+                    &mut str_idx,
+                    (hsl.lightness * 100.0).round() as usize,
+                );
+                sixel_string[str_idx].write(b';');
+                str_idx += 1;
+                push_usize(
+                    &mut sixel_string,
+                    &mut str_idx,
+                    (hsl.saturation * 100.0).round() as usize,
+                );
             }
-
-            let bucketer = self.algorithm.build_bucketer(&palette, palette_size);
-            let paletted_pixels = self
-                .dither
-                .dither_and_palettize(&image, &palette, &bucketer);
 
             #[cfg(feature = "dump-mse")]
             {
@@ -618,16 +656,12 @@ impl SixelEncoder {
 
             let width = image.width() as usize;
 
-            let num_chunks = (paletted_pixels.len() / width).div_ceil(6);
-            let chunk_capacity = width * 7;
-            let mut strings =
-                Vec::from_iter((0..num_chunks).map(|_| String::with_capacity(chunk_capacity)));
-
-            paletted_pixels
+            let lens: Vec<_> = paletted_pixels
                 .par_chunks(width * 6)
                 .zip(image.into_raw().par_chunks(width * 6 * 4))
-                .zip(&mut strings)
-                .for_each(|((palette_chunk, rgba_chunk), sixel_string)| {
+                .zip(sixel_string[str_idx..].par_chunks_mut(string_chunk_width))
+                .map(|((palette_chunk, rgba_chunk), sixel_string)| {
+                    let mut str_idx = 0;
                     let mut color_bits = vec![0u8; palette_size * width];
                     let mut color_used = vec![false; palette_size];
                     let chunk_height = palette_chunk.len() / width;
@@ -648,24 +682,48 @@ impl SixelEncoder {
                     color_bits.par_iter_mut().for_each(|d| {
                         *d += 0x3f;
                     });
-                    // SAFETY: 0x3f..=0x7e are valid ASCII bytes
-                    let color_bits = unsafe { String::from_utf8_unchecked(color_bits) };
 
                     for (color, _) in color_used.iter().enumerate().filter(|(_, u)| **u) {
-                        sixel_string.push('#');
-                        push_usize(sixel_string, color);
+                        sixel_string[str_idx].write(b'#');
+                        str_idx += 1;
+                        push_usize(sixel_string, &mut str_idx, color);
                         let base = color * width;
-                        sixel_string.push_str(&color_bits[base..base + width]);
-                        sixel_string.push('$');
+                        for byte in &color_bits[base..base + width] {
+                            sixel_string[str_idx].write(*byte);
+                            str_idx += 1;
+                        }
+                        sixel_string[str_idx].write(b'$');
+                        str_idx += 1;
                     }
-                    sixel_string.push('-');
-                });
 
-            sixel_string.extend(strings);
+                    sixel_string[str_idx].write(b'-');
+                    str_idx += 1;
+                    str_idx
+                })
+                .collect();
+
+            let mut src = str_idx + string_chunk_width;
+            str_idx += lens[0];
+            for len in &lens[1..] {
+                sixel_string.copy_within(src..src + *len, str_idx);
+                src += string_chunk_width;
+                str_idx += *len;
+            }
         }
 
-        sixel_string.push_str(r#"\"#);
-        sixel_string
+        for byte in br#"\"# {
+            sixel_string[str_idx].write(*byte);
+            str_idx += 1;
+        }
+
+        // SAFETY: Sixel strings generate characters in the ascii range.
+        // 0 is a valid value for u8, so the assume_init doesn't cover invalid memory
+        // values even though we may not have written to some of the data.
+        unsafe {
+            let mut init = sixel_string.assume_init().into_vec();
+            init.set_len(str_idx);
+            String::from_utf8_unchecked(init)
+        }
     }
 }
 
@@ -676,8 +734,12 @@ fn rgba_to_lab(Rgba([r, g, b, _]): Rgba<u8>) -> Lab {
 }
 
 fn push_usize(
-    s: &mut String,
+    s: &mut [MaybeUninit<u8>],
+    i: &mut usize,
     n: usize,
 ) {
-    s.push_str(itoa::Buffer::new().format(n));
+    for byte in itoa::Buffer::new().format(n).bytes() {
+        s[*i].write(byte);
+        *i += 1;
+    }
 }
